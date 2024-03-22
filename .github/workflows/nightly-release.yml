@@ -31,4 +31,5 @@ jobs:
     with:
       github_team: 'core'
 
-    secrets: inherit
+    secrets:
+      GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
