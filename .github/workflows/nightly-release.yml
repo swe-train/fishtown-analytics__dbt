@@ -21,14 +21,14 @@ defaults:
   run:
     shell: bash
 
-permissions: write-all
-  # contents: read # reads from the repository to get team membership
+permissions:
+  contents: read # reads from the repository to get team membership
 
 jobs:
   determine-team-membership:
     name: "Determine team membership"
     uses: dbt-labs/actions/.github/workflows/determine-team-membership.yml@er/repo-scope
     with:
-      github_team: 'core'
+      github_team: 'core-group'
 
     secrets: inherit
