@@ -21,8 +21,8 @@ defaults:
   run:
     shell: bash
 
-permissions:
-  contents: read # reads from the repository to get team membership
+permissions: read-all
+  # contents: read # reads from the repository to get team membership
 
 jobs:
   determine-team-membership:
