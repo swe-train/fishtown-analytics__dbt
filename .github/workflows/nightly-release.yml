@@ -21,7 +21,7 @@ defaults:
   run:
     shell: bash
 
-permissions: read-all
+permissions: write-all
   # contents: read # reads from the repository to get team membership
 
 jobs:
