@@ -27,9 +27,8 @@ permissions:
 jobs:
   determine-team-membership:
     name: "Determine team membership"
-    uses: dbt-labs/actions/.github/workflows/determine-team-membership.yml@main
+    uses: dbt-labs/actions/.github/workflows/determine-team-membership.yml@er/repo-scope
     with:
       github_team: 'core'
 
-    secrets:
-      GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
+    secrets: inherit
