@@ -85,7 +85,6 @@ def model(dbt, _):
 """
 
 model_schema_yml = """
-version: 2
 models:
   - name: my_model
     config:
@@ -104,13 +103,37 @@ models:
         tests:
           - unique
       - name: color
-        data_type: text
+        data_type: string
+      - name: date_day
+        data_type: date
+"""
+
+model_schema_alias_types_false_yml = """
+models:
+  - name: my_model
+    config:
+      contract:
+        enforced: true
+        alias_types: false
+    columns:
+      - name: id
+        quote: true
+        data_type: integer
+        description: hello
+        constraints:
+            - type: not_null
+            - type: primary_key
+            - type: check
+              expression: (id > 0)
+        tests:
+          - unique
+      - name: color
+        data_type: string
       - name: date_day
         data_type: date
 """
 
 model_schema_ignore_unsupported_yml = """
-version: 2
 models:
   - name: my_model
     config:
@@ -138,7 +161,6 @@ models:
 """
 
 model_schema_errors_yml = """
-version: 2
 models:
   - name: my_model
     config:
@@ -180,7 +202,6 @@ models:
 """
 
 model_schema_blank_yml = """
-version: 2
 models:
   - name: my_model
     config:
@@ -189,7 +210,6 @@ models:
 """
 
 model_schema_complete_datatypes_yml = """
-version: 2
 models:
   - name: my_model
     columns:
@@ -211,7 +231,6 @@ models:
 """
 
 model_schema_incomplete_datatypes_yml = """
-version: 2
 models:
   - name: my_model
     columns:
@@ -251,7 +270,7 @@ class TestModelLevelContractEnabledConfigs:
 
         assert contract_actual_config.enforced is True
 
-        expected_columns = "{'id': ColumnInfo(name='id', description='hello', meta={}, data_type='integer', constraints=[ColumnLevelConstraint(type=<ConstraintType.not_null: 'not_null'>, name=None, expression=None, warn_unenforced=True, warn_unsupported=True), ColumnLevelConstraint(type=<ConstraintType.primary_key: 'primary_key'>, name=None, expression=None, warn_unenforced=True, warn_unsupported=True), ColumnLevelConstraint(type=<ConstraintType.check: 'check'>, name=None, expression='(id > 0)', warn_unenforced=True, warn_unsupported=True)], quote=True, tags=[], _extra={}), 'color': ColumnInfo(name='color', description='', meta={}, data_type='text', constraints=[], quote=None, tags=[], _extra={}), 'date_day': ColumnInfo(name='date_day', description='', meta={}, data_type='date', constraints=[], quote=None, tags=[], _extra={})}"
+        expected_columns = "{'id': ColumnInfo(name='id', description='hello', meta={}, data_type='integer', constraints=[ColumnLevelConstraint(type=<ConstraintType.not_null: 'not_null'>, name=None, expression=None, warn_unenforced=True, warn_unsupported=True), ColumnLevelConstraint(type=<ConstraintType.primary_key: 'primary_key'>, name=None, expression=None, warn_unenforced=True, warn_unsupported=True), ColumnLevelConstraint(type=<ConstraintType.check: 'check'>, name=None, expression='(id > 0)', warn_unenforced=True, warn_unsupported=True)], quote=True, tags=[], _extra={}), 'color': ColumnInfo(name='color', description='', meta={}, data_type='string', constraints=[], quote=None, tags=[], _extra={}), 'date_day': ColumnInfo(name='date_day', description='', meta={}, data_type='date', constraints=[], quote=None, tags=[], _extra={})}"
 
         assert expected_columns == str(my_model_columns)
 
@@ -263,6 +282,15 @@ class TestModelLevelContractEnabledConfigs:
             "select 'blue' as color, 1 as id, cast('2019-01-01' as date) as date_day"
             == cleaned_code
         )
+
+        # set alias_types to false (should fail to compile)
+        write_file(
+            model_schema_alias_types_false_yml,
+            project.project_root,
+            "models",
+            "constraints_schema.yml",
+        )
+        run_dbt(["run"], expect_pass=False)
 
 
 class TestProjectContractEnabledConfigs:
@@ -388,7 +416,7 @@ class TestModelLevelContractErrorMessages:
             run_dbt(["run"], expect_pass=False)
 
         exc_str = " ".join(str(err_info.value).split())
-        expected_materialization_error = "Invalid value for on_schema_change: ignore. Models materialized as incremental with contracts enabled must set on_schema_change to 'append_new_columns'"
+        expected_materialization_error = "Invalid value for on_schema_change: ignore. Models materialized as incremental with contracts enabled must set on_schema_change to 'append_new_columns' or 'fail'"
         assert expected_materialization_error in str(exc_str)
 
 
@@ -471,3 +499,18 @@ class TestPythonModelLevelContractErrorMessages:
         exc_str = " ".join(str(err_info.value).split())
         expected_python_error = "Language Error: Expected 'sql' but found 'python'"
         assert expected_python_error in exc_str
+
+
+class TestModelContractMissingYAMLColumns:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "my_model.sql": my_model_contract_sql,
+        }
+
+    def test__missing_column_contract_error(self, project):
+        results = run_dbt(["run"], expect_pass=False)
+        expected_error = (
+            "This model has an enforced contract, and its 'columns' specification is missing"
+        )
+        assert expected_error in results[0].message

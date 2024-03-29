@@ -31,10 +31,11 @@ class MacroParser(BaseParser[Macro]):
 
     def parse_macro(self, block: jinja.BlockTag, base_node: UnparsedMacro, name: str) -> Macro:
         unique_id = self.generate_unique_id(name)
+        macro_sql = block.full_block or ""
 
         return Macro(
             path=base_node.path,
-            macro_sql=block.full_block,
+            macro_sql=macro_sql,
             original_file_path=base_node.original_file_path,
             package_name=base_node.package_name,
             resource_type=base_node.resource_type,
@@ -81,7 +82,7 @@ class MacroParser(BaseParser[Macro]):
             name: str = macro.name.replace(MACRO_PREFIX, "")
             node = self.parse_macro(block, base_node, name)
             # get supported_languages for materialization macro
-            if "materialization" in name:
+            if block.block_type_name == "materialization":
                 node.supported_languages = jinja.get_supported_languages(macro)
             yield node
 

@@ -76,6 +76,7 @@ schema_file_keys = (
     "exposures",
     "metrics",
     "semantic_models",
+    "saved_queries",
 )
 
 
@@ -147,7 +148,7 @@ class SchemaParser(SimpleParser[YamlBlock, ModelNode]):
     def resource_type(self) -> NodeType:
         return NodeType.Test
 
-    def parse_file(self, block: FileBlock, dct: Dict = None) -> None:
+    def parse_file(self, block: FileBlock, dct: Optional[Dict] = None) -> None:
         assert isinstance(block.file, SchemaSourceFile)
 
         # If partially parsing, dct should be from pp_dict, otherwise
@@ -224,6 +225,12 @@ class SchemaParser(SimpleParser[YamlBlock, ModelNode]):
 
                 semantic_model_parser = SemanticModelParser(self, yaml_block)
                 semantic_model_parser.parse()
+
+            if "saved_queries" in dct:
+                from dbt.parser.schema_yaml_readers import SavedQueryParser
+
+                saved_query_parser = SavedQueryParser(self, yaml_block)
+                saved_query_parser.parse()
 
 
 Parsed = TypeVar("Parsed", UnpatchedSourceDefinition, ParsedNodePatch, ParsedMacroPatch)
@@ -469,6 +476,7 @@ class PatchParser(YamlReader, Generic[NonSourceTarget, Parsed]):
                     self.normalize_docs_attribute(data, path)
                     self.normalize_group_attribute(data, path)
                     self.normalize_contract_attribute(data, path)
+                    self.normalize_access_attribute(data, path)
                 node = self._target_type().from_dict(data)
             except (ValidationError, JSONValidationError) as exc:
                 raise YamlParseDictError(path, self.key, data, exc)
@@ -502,6 +510,9 @@ class PatchParser(YamlReader, Generic[NonSourceTarget, Parsed]):
 
     def normalize_contract_attribute(self, data, path):
         return self.normalize_attribute(data, path, "contract")
+
+    def normalize_access_attribute(self, data, path):
+        return self.normalize_attribute(data, path, "access")
 
     def patch_node_config(self, node, patch):
         # Get the ContextConfig that's used in calculating the config
@@ -651,6 +662,8 @@ class NodePatchParser(PatchParser[NodeTarget, ParsedNodePatch], Generic[NodeTarg
 
 # TestablePatchParser = seeds, snapshots
 class TestablePatchParser(NodePatchParser[UnparsedNodeUpdate]):
+    __test__ = False
+
     def get_block(self, node: UnparsedNodeUpdate) -> TestBlock:
         return TestBlock.from_yaml_block(self.yaml, node)
 
@@ -691,7 +704,7 @@ class ModelPatchParser(NodePatchParser[UnparsedModelUpdate]):
                 )
                 # ref lookup without version - version is not set yet
                 versioned_model_unique_id = self.manifest.ref_lookup.get_unique_id(
-                    versioned_model_name, None, None
+                    versioned_model_name, target.package_name, None
                 )
 
                 versioned_model_node = None
@@ -700,7 +713,7 @@ class ModelPatchParser(NodePatchParser[UnparsedModelUpdate]):
                 # If this is the latest version, it's allowed to define itself in a model file name that doesn't have a suffix
                 if versioned_model_unique_id is None and unparsed_version.v == latest_version:
                     versioned_model_unique_id = self.manifest.ref_lookup.get_unique_id(
-                        block.name, None, None
+                        block.name, target.package_name, None
                     )
 
                 if versioned_model_unique_id is None:
@@ -784,6 +797,12 @@ class ModelPatchParser(NodePatchParser[UnparsedModelUpdate]):
 
                 # Includes alias recomputation
                 self.patch_node_config(versioned_model_node, versioned_model_patch)
+
+                # Need to reapply setting constraints and contract checksum here, because
+                # they depend on node.contract.enabled, which wouldn't be set when
+                # patch_node_properties was called if it wasn't set in the model file.
+                self.patch_constraints(versioned_model_node, versioned_model_patch.constraints)
+                versioned_model_node.build_contract_checksum()
                 source_file.append_patch(
                     versioned_model_patch.yaml_key, versioned_model_node.unique_id
                 )
@@ -806,6 +825,7 @@ class ModelPatchParser(NodePatchParser[UnparsedModelUpdate]):
                     unique_id=node.unique_id,
                     field_value=patch.access,
                 )
+        # These two will have to be reapplied after config is built for versioned models
         self.patch_constraints(node, patch.constraints)
         node.build_contract_checksum()
 

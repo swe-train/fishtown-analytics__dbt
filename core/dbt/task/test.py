@@ -1,7 +1,5 @@
-from distutils.util import strtobool
-
 from dataclasses import dataclass
-from dbt.utils import _coerce_decimal
+from dbt.utils import _coerce_decimal, strtobool
 from dbt.events.format import pluralize
 from dbt.dataclass_schema import dbtClassMixin
 import threading
@@ -183,7 +181,7 @@ class TestRunner(CompileRunner):
 
 
 class TestSelector(ResourceTypeSelector):
-    def __init__(self, graph, manifest, previous_state):
+    def __init__(self, graph, manifest, previous_state) -> None:
         super().__init__(
             graph=graph,
             manifest=manifest,

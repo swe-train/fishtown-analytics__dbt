@@ -12,8 +12,12 @@
   {% set contract_config = config.get('contract') %}
   {% if contract_config.enforced %}
     {{ get_assert_columns_equivalent(sql) }}
-    {{ get_table_columns_and_constraints() }} ;
-    insert into {{ relation }} {{ get_column_names() }}
+  {% endif -%}
+  {% if contract_config.enforced and (not temporary) -%}
+      {{ get_table_columns_and_constraints() }} ;
+    insert into {{ relation }} (
+      {{ adapter.dispatch('get_column_names', 'dbt')() }}
+    )
     {%- set sql = get_select_subquery(sql) %}
   {% else %}
     as
@@ -246,5 +250,5 @@
 
 
 {%- macro postgres__get_drop_index_sql(relation, index_name) -%}
-    drop index if exists "{{ index_name }}"
+    drop index if exists "{{ relation.schema }}"."{{ index_name }}"
 {%- endmacro -%}

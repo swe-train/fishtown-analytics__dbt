@@ -6,23 +6,29 @@ from enum import Enum
 import hashlib
 
 from mashumaro.types import SerializableType
-from typing import Optional, Union, List, Dict, Any, Sequence, Tuple, Iterator, Protocol
+from typing import Optional, Union, List, Dict, Any, Sequence, Tuple, Iterator, Literal
 
 from dbt.dataclass_schema import dbtClassMixin, ExtensibleDbtClassMixin
 
 from dbt.clients.system import write_file
 from dbt.contracts.files import FileHash
-from dbt.contracts.graph.unparsed import (
+from dbt.contracts.graph.saved_queries import Export, QueryParams
+from dbt.contracts.graph.semantic_models import (
+    Defaults,
     Dimension,
-    Docs,
     Entity,
+    Measure,
+    SourceFileMetadata,
+)
+from dbt.contracts.graph.unparsed import (
+    ConstantPropertyInput,
+    Docs,
     ExposureType,
     ExternalTable,
     FreshnessThreshold,
     HasYamlMetadata,
     MacroArgument,
     MaturityType,
-    Measure,
     Owner,
     Quoting,
     TestDef,
@@ -31,6 +37,8 @@ from dbt.contracts.graph.unparsed import (
     UnparsedSourceTableDefinition,
     UnparsedColumn,
 )
+from dbt.contracts.graph.node_args import ModelNodeArgs
+from dbt.contracts.graph.semantic_layer_common import WhereFilterIntersection
 from dbt.contracts.util import Replaceable, AdditionalPropertiesMixin
 from dbt.events.functions import warn_or_error
 from dbt.exceptions import ParsingError, ContractBreakingChangeError
@@ -39,17 +47,28 @@ from dbt.events.types import (
     SeedExceedsLimitSamePath,
     SeedExceedsLimitAndPathChanged,
     SeedExceedsLimitChecksumChanged,
+    UnversionedBreakingChange,
 )
-from dbt.events.contextvars import set_contextvars
+from dbt.events.contextvars import set_log_contextvars
 from dbt.flags import get_flags
 from dbt.node_types import ModelLanguage, NodeType, AccessType
-from dbt_semantic_interfaces.references import MeasureReference
+from dbt_semantic_interfaces.references import (
+    EntityReference,
+    MeasureReference,
+    LinkableElementReference,
+    SemanticModelReference,
+    TimeDimensionReference,
+)
 from dbt_semantic_interfaces.references import MetricReference as DSIMetricReference
-from dbt_semantic_interfaces.type_enums.metric_type import MetricType
-from dbt_semantic_interfaces.type_enums.time_granularity import TimeGranularity
+from dbt_semantic_interfaces.type_enums import (
+    ConversionCalculationType,
+    MetricType,
+    TimeGranularity,
+)
 
 from .model_config import (
     NodeConfig,
+    ModelConfig,
     SeedConfig,
     TestConfig,
     SourceConfig,
@@ -57,6 +76,8 @@ from .model_config import (
     ExposureConfig,
     EmptySnapshotConfig,
     SnapshotConfig,
+    SemanticModelConfig,
+    SavedQueryConfig,
 )
 
 
@@ -217,6 +238,7 @@ class ColumnInfo(AdditionalPropertiesMixin, ExtensibleDbtClassMixin, Replaceable
 @dataclass
 class Contract(dbtClassMixin, Replaceable):
     enforced: bool = False
+    alias_types: bool = True
     checksum: Optional[str] = None
 
 
@@ -250,8 +272,9 @@ class MacroDependsOn(dbtClassMixin, Replaceable):
 
 
 @dataclass
-class RelationalNode(HasRelationMetadata):
+class DeferRelation(HasRelationMetadata):
     alias: str
+    relation_name: Optional[str]
 
     @property
     def identifier(self):
@@ -261,26 +284,10 @@ class RelationalNode(HasRelationMetadata):
 @dataclass
 class DependsOn(MacroDependsOn):
     nodes: List[str] = field(default_factory=list)
-    public_nodes: List[str] = field(default_factory=list)
 
     def add_node(self, value: str):
         if value not in self.nodes:
             self.nodes.append(value)
-
-    def add_public_node(self, value: str):
-        if value not in self.public_nodes:
-            self.public_nodes.append(value)
-
-
-@dataclass
-class StateRelation(dbtClassMixin):
-    alias: str
-    database: Optional[str]
-    schema: str
-
-    @property
-    def identifier(self):
-        return self.alias
 
 
 @dataclass
@@ -324,7 +331,7 @@ class NodeInfoMixin:
     def update_event_status(self, **kwargs):
         for k, v in kwargs.items():
             self._event_status[k] = v
-        set_contextvars(node_info=self.node_info)
+        set_log_contextvars(node_info=self.node_info)
 
     def clear_event_status(self):
         self._event_status = dict()
@@ -480,7 +487,7 @@ class ParsedNode(NodeInfoMixin, ParsedNodeMandatory, SerializableType):
         )
 
     @property
-    def is_public_node(self):
+    def is_external_node(self):
         return False
 
 
@@ -546,36 +553,8 @@ class CompiledNode(ParsedNode):
         return self.depends_on.nodes
 
     @property
-    def depends_on_public_nodes(self):
-        return self.depends_on.public_nodes
-
-    @property
     def depends_on_macros(self):
         return self.depends_on.macros
-
-
-@dataclass
-class FileSlice(dbtClassMixin, Replaceable):
-    """Provides file slice level context about what something was created from.
-
-    Implementation of the dbt-semantic-interfaces `FileSlice` protocol
-    """
-
-    filename: str
-    content: str
-    start_line_number: int
-    end_line_number: int
-
-
-@dataclass
-class SourceFileMetadata(dbtClassMixin, Replaceable):
-    """Provides file context about what something was created from.
-
-    Implementation of the dbt-semantic-interfaces `Metadata` protocol
-    """
-
-    repo_file_path: str
-    file_slice: FileSlice
 
 
 # ====================================
@@ -585,24 +564,62 @@ class SourceFileMetadata(dbtClassMixin, Replaceable):
 
 @dataclass
 class AnalysisNode(CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Analysis]})
+    resource_type: Literal[NodeType.Analysis]
 
 
 @dataclass
 class HookNode(CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Operation]})
+    resource_type: Literal[NodeType.Operation]
     index: Optional[int] = None
 
 
 @dataclass
 class ModelNode(CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Model]})
+    resource_type: Literal[NodeType.Model]
     access: AccessType = AccessType.Protected
+    config: ModelConfig = field(default_factory=ModelConfig)
     constraints: List[ModelLevelConstraint] = field(default_factory=list)
     version: Optional[NodeVersion] = None
     latest_version: Optional[NodeVersion] = None
     deprecation_date: Optional[datetime] = None
-    state_relation: Optional[StateRelation] = None
+    defer_relation: Optional[DeferRelation] = None
+
+    @classmethod
+    def from_args(cls, args: ModelNodeArgs) -> "ModelNode":
+        unique_id = args.unique_id
+
+        # build unrendered config -- for usage in ParsedNode.same_contents
+        unrendered_config = {}
+        unrendered_config["alias"] = args.identifier
+        unrendered_config["schema"] = args.schema
+        if args.database:
+            unrendered_config["database"] = args.database
+
+        return cls(
+            resource_type=NodeType.Model,
+            name=args.name,
+            package_name=args.package_name,
+            unique_id=unique_id,
+            fqn=args.fqn,
+            version=args.version,
+            latest_version=args.latest_version,
+            relation_name=args.relation_name,
+            database=args.database,
+            schema=args.schema,
+            alias=args.identifier,
+            deprecation_date=args.deprecation_date,
+            checksum=FileHash.from_contents(f"{unique_id},{args.generated_at}"),
+            access=AccessType(args.access),
+            original_file_path="",
+            path="",
+            unrendered_config=unrendered_config,
+            depends_on=DependsOn(nodes=args.depends_on_nodes),
+            config=ModelConfig(enabled=args.enabled),
+        )
+
+    @property
+    def is_external_node(self) -> bool:
+        return not self.original_file_path and not self.path
 
     @property
     def is_latest_version(self) -> bool:
@@ -619,10 +636,27 @@ class ModelNode(CompiledNode):
     def materialization_enforces_constraints(self) -> bool:
         return self.config.materialized in ["table", "incremental"]
 
+    def same_contents(self, old, adapter_type) -> bool:
+        return super().same_contents(old, adapter_type) and self.same_ref_representation(old)
+
+    def same_ref_representation(self, old) -> bool:
+        return (
+            # Changing the latest_version may break downstream unpinned refs
+            self.latest_version == old.latest_version
+            # Changes to access or deprecation_date may lead to ref-related parsing errors
+            and self.access == old.access
+            and self.deprecation_date == old.deprecation_date
+        )
+
     def build_contract_checksum(self):
         # We don't need to construct the checksum if the model does not
         # have contract enforced, because it won't be used.
         # This needs to be executed after contract config is set
+
+        # Avoid rebuilding the checksum if it has already been set.
+        if self.contract.checksum is not None:
+            return
+
         if self.contract.enforced is True:
             contract_state = ""
             # We need to sort the columns so that order doesn't matter
@@ -658,11 +692,11 @@ class ModelNode(CompiledNode):
         # These are the categories of breaking changes:
         contract_enforced_disabled: bool = False
         columns_removed: List[str] = []
-        column_type_changes: List[Tuple[str, str, str]] = []
-        enforced_column_constraint_removed: List[Tuple[str, str]] = []  # column, constraint_type
-        enforced_model_constraint_removed: List[
-            Tuple[str, List[str]]
-        ] = []  # constraint_type, columns
+        column_type_changes: List[Dict[str, str]] = []
+        enforced_column_constraint_removed: List[
+            Dict[str, str]
+        ] = []  # column_name, constraint_type
+        enforced_model_constraint_removed: List[Dict[str, Any]] = []  # constraint_type, columns
         materialization_changed: List[str] = []
 
         if old.contract.enforced is True and self.contract.enforced is False:
@@ -684,11 +718,11 @@ class ModelNode(CompiledNode):
             # Has this column's data type changed?
             elif old_value.data_type != self.columns[old_key].data_type:
                 column_type_changes.append(
-                    (
-                        str(old_value.name),
-                        str(old_value.data_type),
-                        str(self.columns[old_key].data_type),
-                    )
+                    {
+                        "column_name": str(old_value.name),
+                        "previous_column_type": str(old_value.data_type),
+                        "current_column_type": str(self.columns[old_key].data_type),
+                    }
                 )
 
             # track if there are any column level constraints for the materialization check late
@@ -703,14 +737,17 @@ class ModelNode(CompiledNode):
                 and old_value.constraints != self.columns[old_key].constraints
                 and old.materialization_enforces_constraints
             ):
-
                 for old_constraint in old_value.constraints:
                     if (
                         old_constraint not in self.columns[old_key].constraints
                         and constraint_support[old_constraint.type] == ConstraintSupport.ENFORCED
                     ):
                         enforced_column_constraint_removed.append(
-                            (old_key, str(old_constraint.type))
+                            {
+                                "column_name": old_key,
+                                "constraint_name": old_constraint.name,
+                                "constraint_type": ConstraintType(old_constraint.type),
+                            }
                         )
 
         # Now compare the model level constraints
@@ -721,7 +758,11 @@ class ModelNode(CompiledNode):
                     and constraint_support[old_constraint.type] == ConstraintSupport.ENFORCED
                 ):
                     enforced_model_constraint_removed.append(
-                        (str(old_constraint.type), old_constraint.columns)
+                        {
+                            "constraint_name": old_constraint.name,
+                            "constraint_type": ConstraintType(old_constraint.type),
+                            "columns": old_constraint.columns,
+                        }
                     )
 
         # Check for relevant materialization changes.
@@ -735,7 +776,8 @@ class ModelNode(CompiledNode):
         # If a column has been added, it will be missing in the old.columns, and present in self.columns
         # That's a change (caught by the different checksums), but not a breaking change
 
-        # Did we find any changes that we consider breaking? If so, that's an error
+        # Did we find any changes that we consider breaking? If there's an enforced contract, that's
+        # a warning unless the model is versioned, then it's an error.
         if (
             contract_enforced_disabled
             or columns_removed
@@ -744,32 +786,89 @@ class ModelNode(CompiledNode):
             or enforced_column_constraint_removed
             or materialization_changed
         ):
-            raise (
-                ContractBreakingChangeError(
-                    contract_enforced_disabled=contract_enforced_disabled,
-                    columns_removed=columns_removed,
-                    column_type_changes=column_type_changes,
-                    enforced_column_constraint_removed=enforced_column_constraint_removed,
-                    enforced_model_constraint_removed=enforced_model_constraint_removed,
-                    materialization_changed=materialization_changed,
+
+            breaking_changes = []
+            if contract_enforced_disabled:
+                breaking_changes.append(
+                    "Contract enforcement was removed: Previously, this model had an enforced contract. It is no longer configured to enforce its contract, and this is a breaking change."
+                )
+            if columns_removed:
+                columns_removed_str = "\n    - ".join(columns_removed)
+                breaking_changes.append(f"Columns were removed: \n    - {columns_removed_str}")
+            if column_type_changes:
+                column_type_changes_str = "\n    - ".join(
+                    [
+                        f"{c['column_name']} ({c['previous_column_type']} -> {c['current_column_type']})"
+                        for c in column_type_changes
+                    ]
+                )
+                breaking_changes.append(
+                    f"Columns with data_type changes: \n    - {column_type_changes_str}"
+                )
+            if enforced_column_constraint_removed:
+                column_constraint_changes_str = "\n    - ".join(
+                    [
+                        f"'{c['constraint_name'] if c['constraint_name'] is not None else c['constraint_type']}' constraint on column {c['column_name']}"
+                        for c in enforced_column_constraint_removed
+                    ]
+                )
+                breaking_changes.append(
+                    f"Enforced column level constraints were removed: \n    - {column_constraint_changes_str}"
+                )
+            if enforced_model_constraint_removed:
+                model_constraint_changes_str = "\n    - ".join(
+                    [
+                        f"'{c['constraint_name'] if c['constraint_name'] is not None else c['constraint_type']}' constraint on columns {c['columns']}"
+                        for c in enforced_model_constraint_removed
+                    ]
+                )
+                breaking_changes.append(
+                    f"Enforced model level constraints were removed: \n    - {model_constraint_changes_str}"
+                )
+            if materialization_changed:
+                materialization_changes_str = (
+                    f"{materialization_changed[0]} -> {materialization_changed[1]}"
+                )
+
+                breaking_changes.append(
+                    f"Materialization changed with enforced constraints: \n    - {materialization_changes_str}"
+                )
+
+            if self.version is None:
+                warn_or_error(
+                    UnversionedBreakingChange(
+                        contract_enforced_disabled=contract_enforced_disabled,
+                        columns_removed=columns_removed,
+                        column_type_changes=column_type_changes,
+                        enforced_column_constraint_removed=enforced_column_constraint_removed,
+                        enforced_model_constraint_removed=enforced_model_constraint_removed,
+                        breaking_changes=breaking_changes,
+                        model_name=self.name,
+                        model_file_path=self.original_file_path,
+                    ),
                     node=self,
                 )
-            )
+            else:
+                raise (
+                    ContractBreakingChangeError(
+                        breaking_changes=breaking_changes,
+                        node=self,
+                    )
+                )
 
-        # Otherwise, though we didn't find any *breaking* changes, the contract has still changed -- same_contract: False
-        else:
-            return False
+        # Otherwise, the contract has changed -- same_contract: False
+        return False
 
 
 # TODO: rm?
 @dataclass
 class RPCNode(CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.RPCCall]})
+    resource_type: Literal[NodeType.RPCCall]
 
 
 @dataclass
 class SqlNode(CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.SqlOperation]})
+    resource_type: Literal[NodeType.SqlOperation]
 
 
 # ====================================
@@ -779,13 +878,13 @@ class SqlNode(CompiledNode):
 
 @dataclass
 class SeedNode(ParsedNode):  # No SQLDefaults!
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Seed]})
+    resource_type: Literal[NodeType.Seed]
     config: SeedConfig = field(default_factory=SeedConfig)
     # seeds need the root_path because the contents are not loaded initially
     # and we need the root_path to load the seed later
     root_path: Optional[str] = None
     depends_on: MacroDependsOn = field(default_factory=MacroDependsOn)
-    state_relation: Optional[StateRelation] = None
+    defer_relation: Optional[DeferRelation] = None
 
     def same_seeds(self, other: "SeedNode") -> bool:
         # for seeds, we check the hashes. If the hashes are different types,
@@ -868,10 +967,6 @@ Error raised for '{self.unique_id}', which has these hooks defined: \n{hook_list
         return []
 
     @property
-    def depends_on_public_nodes(self):
-        return []
-
-    @property
     def depends_on_macros(self) -> List[str]:
         return self.depends_on.macros
 
@@ -909,7 +1004,7 @@ class TestShouldStoreFailures:
 
 @dataclass
 class SingularTestNode(TestShouldStoreFailures, CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Test]})
+    resource_type: Literal[NodeType.Test]
     # Was not able to make mypy happy and keep the code working. We need to
     # refactor the various configs.
     config: TestConfig = field(default_factory=TestConfig)  # type: ignore
@@ -926,6 +1021,8 @@ class SingularTestNode(TestShouldStoreFailures, CompiledNode):
 
 @dataclass
 class TestMetadata(dbtClassMixin, Replaceable):
+    __test__ = False
+
     name: str
     # kwargs are the args that are left in the test builder after
     # removing configs. They are set from the test builder when
@@ -943,7 +1040,7 @@ class HasTestMetadata(dbtClassMixin):
 
 @dataclass
 class GenericTestNode(TestShouldStoreFailures, CompiledNode, HasTestMetadata):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Test]})
+    resource_type: Literal[NodeType.Test]
     column_name: Optional[str] = None
     file_key_name: Optional[str] = None
     # Was not able to make mypy happy and keep the code working. We need to
@@ -976,15 +1073,15 @@ class IntermediateSnapshotNode(CompiledNode):
     # uses a regular node config, which the snapshot parser will then convert
     # into a full ParsedSnapshotNode after rendering. Note: it currently does
     # not work to set snapshot config in schema files because of the validation.
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Snapshot]})
+    resource_type: Literal[NodeType.Snapshot]
     config: EmptySnapshotConfig = field(default_factory=EmptySnapshotConfig)
 
 
 @dataclass
 class SnapshotNode(CompiledNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Snapshot]})
+    resource_type: Literal[NodeType.Snapshot]
     config: SnapshotConfig
-    state_relation: Optional[StateRelation] = None
+    defer_relation: Optional[DeferRelation] = None
 
 
 # ====================================
@@ -995,7 +1092,7 @@ class SnapshotNode(CompiledNode):
 @dataclass
 class Macro(BaseNode):
     macro_sql: str
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Macro]})
+    resource_type: Literal[NodeType.Macro]
     depends_on: MacroDependsOn = field(default_factory=MacroDependsOn)
     description: str = ""
     meta: Dict[str, Any] = field(default_factory=dict)
@@ -1025,7 +1122,7 @@ class Macro(BaseNode):
 @dataclass
 class Documentation(BaseNode):
     block_contents: str
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Documentation]})
+    resource_type: Literal[NodeType.Documentation]
 
     @property
     def search_name(self):
@@ -1056,7 +1153,7 @@ class UnpatchedSourceDefinition(BaseNode):
     source: UnparsedSourceDefinition
     table: UnparsedSourceTableDefinition
     fqn: List[str]
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Source]})
+    resource_type: Literal[NodeType.Source]
     patch_path: Optional[str] = None
 
     def get_full_source_name(self):
@@ -1101,7 +1198,7 @@ class ParsedSourceMandatory(GraphNode, HasRelationMetadata):
     source_description: str
     loader: str
     identifier: str
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Source]})
+    resource_type: Literal[NodeType.Source]
 
 
 @dataclass
@@ -1199,10 +1296,6 @@ class SourceDefinition(NodeInfoMixin, ParsedSourceMandatory):
         return []
 
     @property
-    def depends_on_public_nodes(self):
-        return []
-
-    @property
     def depends_on(self):
         return DependsOn(macros=[], nodes=[])
 
@@ -1215,8 +1308,8 @@ class SourceDefinition(NodeInfoMixin, ParsedSourceMandatory):
         return []
 
     @property
-    def has_freshness(self):
-        return bool(self.freshness) and self.loaded_at_field is not None
+    def has_freshness(self) -> bool:
+        return bool(self.freshness)
 
     @property
     def search_name(self):
@@ -1232,7 +1325,7 @@ class SourceDefinition(NodeInfoMixin, ParsedSourceMandatory):
 class Exposure(GraphNode):
     type: ExposureType
     owner: Owner
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Exposure]})
+    resource_type: Literal[NodeType.Exposure]
     description: str = ""
     label: Optional[str] = None
     maturity: Optional[MaturityType] = None
@@ -1250,10 +1343,6 @@ class Exposure(GraphNode):
     @property
     def depends_on_nodes(self):
         return self.depends_on.nodes
-
-    @property
-    def depends_on_public_nodes(self):
-        return self.depends_on.public_nodes
 
     @property
     def search_name(self):
@@ -1305,6 +1394,10 @@ class Exposure(GraphNode):
             and True
         )
 
+    @property
+    def group(self):
+        return None
+
 
 # ====================================
 # Metric node
@@ -1312,20 +1405,17 @@ class Exposure(GraphNode):
 
 
 @dataclass
-class WhereFilter(dbtClassMixin):
-    where_sql_template: str
-
-
-@dataclass
 class MetricInputMeasure(dbtClassMixin):
     name: str
-    filter: Optional[WhereFilter] = None
+    filter: Optional[WhereFilterIntersection] = None
     alias: Optional[str] = None
+    join_to_timespine: bool = False
+    fill_nulls_with: Optional[int] = None
 
     def measure_reference(self) -> MeasureReference:
         return MeasureReference(element_name=self.name)
 
-    def post_aggregation_measure_referenc(self) -> MeasureReference:
+    def post_aggregation_measure_reference(self) -> MeasureReference:
         return MeasureReference(element_name=self.alias or self.name)
 
 
@@ -1338,7 +1428,7 @@ class MetricTimeWindow(dbtClassMixin):
 @dataclass
 class MetricInput(dbtClassMixin):
     name: str
-    filter: Optional[WhereFilter] = None
+    filter: Optional[WhereFilterIntersection] = None
     alias: Optional[str] = None
     offset_window: Optional[MetricTimeWindow] = None
     offset_to_grain: Optional[TimeGranularity] = None
@@ -1346,23 +1436,31 @@ class MetricInput(dbtClassMixin):
     def as_reference(self) -> DSIMetricReference:
         return DSIMetricReference(element_name=self.name)
 
+    def post_aggregation_reference(self) -> DSIMetricReference:
+        return DSIMetricReference(element_name=self.alias or self.name)
+
+
+@dataclass
+class ConversionTypeParams(dbtClassMixin):
+    base_measure: MetricInputMeasure
+    conversion_measure: MetricInputMeasure
+    entity: str
+    calculation: ConversionCalculationType = ConversionCalculationType.CONVERSION_RATE
+    window: Optional[MetricTimeWindow] = None
+    constant_properties: Optional[List[ConstantPropertyInput]] = None
+
 
 @dataclass
 class MetricTypeParams(dbtClassMixin):
     measure: Optional[MetricInputMeasure] = None
-    measures: Optional[List[MetricInputMeasure]] = None
-    numerator: Optional[MetricInputMeasure] = None
-    denominator: Optional[MetricInputMeasure] = None
+    input_measures: List[MetricInputMeasure] = field(default_factory=list)
+    numerator: Optional[MetricInput] = None
+    denominator: Optional[MetricInput] = None
     expr: Optional[str] = None
     window: Optional[MetricTimeWindow] = None
     grain_to_date: Optional[TimeGranularity] = None
     metrics: Optional[List[MetricInput]] = None
-
-    def numerator_measure_reference(self) -> Optional[MeasureReference]:
-        return self.numerator.measure_reference() if self.numerator else None
-
-    def denominator_measure_reference(self) -> Optional[MeasureReference]:
-        return self.denominator.measure_reference() if self.denominator else None
+    conversion_type_params: Optional[ConversionTypeParams] = None
 
 
 @dataclass
@@ -1378,9 +1476,9 @@ class Metric(GraphNode):
     label: str
     type: MetricType
     type_params: MetricTypeParams
-    filter: Optional[WhereFilter] = None
+    filter: Optional[WhereFilterIntersection] = None
     metadata: Optional[SourceFileMetadata] = None
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Metric]})
+    resource_type: Literal[NodeType.Metric]
     meta: Dict[str, Any] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
     config: MetricConfig = field(default_factory=MetricConfig)
@@ -1397,25 +1495,12 @@ class Metric(GraphNode):
         return self.depends_on.nodes
 
     @property
-    def depends_on_public_nodes(self):
-        return self.depends_on.public_nodes
-
-    @property
     def search_name(self):
         return self.name
 
     @property
     def input_measures(self) -> List[MetricInputMeasure]:
-        tp = self.type_params
-        res = tp.measures or []
-        if tp.measure:
-            res.append(tp.measure)
-        if tp.numerator:
-            res.append(tp.numerator)
-        if tp.denominator:
-            res.append(tp.denominator)
-
-        return res
+        return self.type_params.input_measures
 
     @property
     def measure_references(self) -> List[MeasureReference]:
@@ -1466,6 +1551,12 @@ class Metric(GraphNode):
             and True
         )
 
+    def add_input_measure(self, input_measure: MetricInputMeasure) -> None:
+        for existing_input_measure in self.type_params.input_measures:
+            if input_measure == existing_input_measure:
+                return
+        self.type_params.input_measures.append(input_measure)
+
 
 # ====================================
 # Group node
@@ -1476,7 +1567,7 @@ class Metric(GraphNode):
 class Group(BaseNode):
     name: str
     owner: Owner
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Group]})
+    resource_type: Literal[NodeType.Group]
 
 
 # ====================================
@@ -1489,16 +1580,247 @@ class NodeRelation(dbtClassMixin):
     alias: str
     schema_name: str  # TODO: Could this be called simply "schema" so we could reuse StateRelation?
     database: Optional[str] = None
+    relation_name: Optional[str] = None
 
 
 @dataclass
 class SemanticModel(GraphNode):
-    description: Optional[str]
     model: str
     node_relation: Optional[NodeRelation]
-    entities: Sequence[Entity]
-    measures: Sequence[Measure]
-    dimensions: Sequence[Dimension]
+    description: Optional[str] = None
+    label: Optional[str] = None
+    defaults: Optional[Defaults] = None
+    entities: Sequence[Entity] = field(default_factory=list)
+    measures: Sequence[Measure] = field(default_factory=list)
+    dimensions: Sequence[Dimension] = field(default_factory=list)
+    metadata: Optional[SourceFileMetadata] = None
+    depends_on: DependsOn = field(default_factory=DependsOn)
+    refs: List[RefArgs] = field(default_factory=list)
+    created_at: float = field(default_factory=lambda: time.time())
+    config: SemanticModelConfig = field(default_factory=SemanticModelConfig)
+    unrendered_config: Dict[str, Any] = field(default_factory=dict)
+    primary_entity: Optional[str] = None
+    group: Optional[str] = None
+
+    @property
+    def entity_references(self) -> List[LinkableElementReference]:
+        return [entity.reference for entity in self.entities]
+
+    @property
+    def dimension_references(self) -> List[LinkableElementReference]:
+        return [dimension.reference for dimension in self.dimensions]
+
+    @property
+    def measure_references(self) -> List[MeasureReference]:
+        return [measure.reference for measure in self.measures]
+
+    @property
+    def has_validity_dimensions(self) -> bool:
+        return any([dim.validity_params is not None for dim in self.dimensions])
+
+    @property
+    def validity_start_dimension(self) -> Optional[Dimension]:
+        validity_start_dims = [
+            dim for dim in self.dimensions if dim.validity_params and dim.validity_params.is_start
+        ]
+        if not validity_start_dims:
+            return None
+        return validity_start_dims[0]
+
+    @property
+    def validity_end_dimension(self) -> Optional[Dimension]:
+        validity_end_dims = [
+            dim for dim in self.dimensions if dim.validity_params and dim.validity_params.is_end
+        ]
+        if not validity_end_dims:
+            return None
+        return validity_end_dims[0]
+
+    @property
+    def partitions(self) -> List[Dimension]:  # noqa: D
+        return [dim for dim in self.dimensions or [] if dim.is_partition]
+
+    @property
+    def partition(self) -> Optional[Dimension]:
+        partitions = self.partitions
+        if not partitions:
+            return None
+        return partitions[0]
+
+    @property
+    def reference(self) -> SemanticModelReference:
+        return SemanticModelReference(semantic_model_name=self.name)
+
+    @property
+    def depends_on_nodes(self):
+        return self.depends_on.nodes
+
+    @property
+    def depends_on_macros(self):
+        return self.depends_on.macros
+
+    def checked_agg_time_dimension_for_measure(
+        self, measure_reference: MeasureReference
+    ) -> TimeDimensionReference:
+        measure: Optional[Measure] = None
+        for measure in self.measures:
+            if measure.reference == measure_reference:
+                measure = measure
+
+        assert (
+            measure is not None
+        ), f"No measure with name ({measure_reference.element_name}) in semantic_model with name ({self.name})"
+
+        default_agg_time_dimension = (
+            self.defaults.agg_time_dimension if self.defaults is not None else None
+        )
+
+        agg_time_dimension_name = measure.agg_time_dimension or default_agg_time_dimension
+        assert agg_time_dimension_name is not None, (
+            f"Aggregation time dimension for measure {measure.name} on semantic model {self.name} is not set! "
+            "To fix this either specify a default `agg_time_dimension` for the semantic model or define an "
+            "`agg_time_dimension` on the measure directly."
+        )
+        return TimeDimensionReference(element_name=agg_time_dimension_name)
+
+    @property
+    def primary_entity_reference(self) -> Optional[EntityReference]:
+        return (
+            EntityReference(element_name=self.primary_entity)
+            if self.primary_entity is not None
+            else None
+        )
+
+    def same_model(self, old: "SemanticModel") -> bool:
+        return self.model == old.same_model
+
+    def same_node_relation(self, old: "SemanticModel") -> bool:
+        return self.node_relation == old.node_relation
+
+    def same_description(self, old: "SemanticModel") -> bool:
+        return self.description == old.description
+
+    def same_defaults(self, old: "SemanticModel") -> bool:
+        return self.defaults == old.defaults
+
+    def same_entities(self, old: "SemanticModel") -> bool:
+        return self.entities == old.entities
+
+    def same_dimensions(self, old: "SemanticModel") -> bool:
+        return self.dimensions == old.dimensions
+
+    def same_measures(self, old: "SemanticModel") -> bool:
+        return self.measures == old.measures
+
+    def same_config(self, old: "SemanticModel") -> bool:
+        return self.config == old.config
+
+    def same_primary_entity(self, old: "SemanticModel") -> bool:
+        return self.primary_entity == old.primary_entity
+
+    def same_group(self, old: "SemanticModel") -> bool:
+        return self.group == old.group
+
+    def same_contents(self, old: Optional["SemanticModel"]) -> bool:
+        # existing when it didn't before is a change!
+        # metadata/tags changes are not "changes"
+        if old is None:
+            return True
+
+        return (
+            self.same_model(old)
+            and self.same_node_relation(old)
+            and self.same_description(old)
+            and self.same_defaults(old)
+            and self.same_entities(old)
+            and self.same_dimensions(old)
+            and self.same_measures(old)
+            and self.same_config(old)
+            and self.same_primary_entity(old)
+            and self.same_group(old)
+            and True
+        )
+
+
+# ====================================
+# SavedQuery and related classes
+# ====================================
+
+
+@dataclass
+class SavedQueryMandatory(GraphNode):
+    query_params: QueryParams
+    exports: List[Export]
+
+
+@dataclass
+class SavedQuery(NodeInfoMixin, SavedQueryMandatory):
+    description: Optional[str] = None
+    label: Optional[str] = None
+    metadata: Optional[SourceFileMetadata] = None
+    config: SavedQueryConfig = field(default_factory=SavedQueryConfig)
+    unrendered_config: Dict[str, Any] = field(default_factory=dict)
+    group: Optional[str] = None
+    depends_on: DependsOn = field(default_factory=DependsOn)
+    created_at: float = field(default_factory=lambda: time.time())
+    refs: List[RefArgs] = field(default_factory=list)
+
+    @property
+    def metrics(self) -> List[str]:
+        return self.query_params.metrics
+
+    @property
+    def depends_on_nodes(self):
+        return self.depends_on.nodes
+
+    def same_metrics(self, old: "SavedQuery") -> bool:
+        return self.query_params.metrics == old.query_params.metrics
+
+    def same_group_by(self, old: "SavedQuery") -> bool:
+        return self.query_params.group_by == old.query_params.group_by
+
+    def same_description(self, old: "SavedQuery") -> bool:
+        return self.description == old.description
+
+    def same_where(self, old: "SavedQuery") -> bool:
+        return self.query_params.where == old.query_params.where
+
+    def same_label(self, old: "SavedQuery") -> bool:
+        return self.label == old.label
+
+    def same_config(self, old: "SavedQuery") -> bool:
+        return self.config == old.config
+
+    def same_group(self, old: "SavedQuery") -> bool:
+        return self.group == old.group
+
+    def same_exports(self, old: "SavedQuery") -> bool:
+        if len(self.exports) != len(old.exports):
+            return False
+
+        # exports should be in the same order, so we zip them for easy iteration
+        for (old_export, new_export) in zip(old.exports, self.exports):
+            if not new_export.same_contents(old_export):
+                return False
+
+        return True
+
+    def same_contents(self, old: Optional["SavedQuery"]) -> bool:
+        # existing when it didn't before is a change!
+        # metadata/tags changes are not "changes"
+        if old is None:
+            return True
+
+        return (
+            self.same_metrics(old)
+            and self.same_group_by(old)
+            and self.same_description(old)
+            and self.same_where(old)
+            and self.same_label(old)
+            and self.same_config(old)
+            and self.same_group(old)
+            and True
+        )
 
 
 # ====================================
@@ -1538,46 +1860,6 @@ class ParsedMacroPatch(ParsedPatch):
 # ====================================
 
 
-class ManifestOrPublicNode(Protocol):
-    name: str
-    package_name: str
-    unique_id: str
-    version: Optional[NodeVersion]
-    latest_version: Optional[NodeVersion]
-    relation_name: str
-    database: Optional[str]
-    schema: Optional[str]
-    identifier: Optional[str]
-
-    @property
-    def is_latest_version(self):
-        pass
-
-    @property
-    def resource_type(self):
-        pass
-
-    @property
-    def access(self):
-        pass
-
-    @property
-    def search_name(self):
-        pass
-
-    @property
-    def is_public_node(self):
-        pass
-
-    @property
-    def is_versioned(self):
-        pass
-
-    @property
-    def alias(self):
-        pass
-
-
 # ManifestNode without SeedNode, which doesn't have the
 # SQL related attributes
 ManifestSQLNode = Union[
@@ -1607,6 +1889,8 @@ GraphMemberNode = Union[
     ResultNode,
     Exposure,
     Metric,
+    SavedQuery,
+    SemanticModel,
 ]
 
 # All "nodes" (or node-like objects) in this file

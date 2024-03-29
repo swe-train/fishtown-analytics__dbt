@@ -1,6 +1,12 @@
 import json
 
-from dbt.contracts.graph.nodes import Exposure, SourceDefinition, Metric
+from dbt.contracts.graph.nodes import (
+    Exposure,
+    SourceDefinition,
+    Metric,
+    SavedQuery,
+    SemanticModel,
+)
 from dbt.flags import get_flags
 from dbt.graph import ResourceTypeSelector
 from dbt.task.runnable import GraphRunnableTask
@@ -15,6 +21,7 @@ from dbt.events.types import (
     ListCmdOut,
 )
 from dbt.exceptions import DbtRuntimeError, DbtInternalError
+from dbt.events.contextvars import task_contextvars
 
 
 class ListTask(GraphRunnableTask):
@@ -27,6 +34,8 @@ class ListTask(GraphRunnableTask):
             NodeType.Source,
             NodeType.Exposure,
             NodeType.Metric,
+            NodeType.SavedQuery,
+            NodeType.SemanticModel,
         )
     )
     ALL_RESOURCE_VALUES = DEFAULT_RESOURCE_VALUES | frozenset((NodeType.Analysis,))
@@ -45,7 +54,7 @@ class ListTask(GraphRunnableTask):
         )
     )
 
-    def __init__(self, args, config, manifest):
+    def __init__(self, args, config, manifest) -> None:
         super().__init__(args, config, manifest)
         if self.args.models:
             if self.args.select:
@@ -73,10 +82,14 @@ class ListTask(GraphRunnableTask):
                 yield self.manifest.exposures[node]
             elif node in self.manifest.metrics:
                 yield self.manifest.metrics[node]
+            elif node in self.manifest.semantic_models:
+                yield self.manifest.semantic_models[node]
+            elif node in self.manifest.saved_queries:
+                yield self.manifest.saved_queries[node]
             else:
                 raise DbtRuntimeError(
                     f'Got an unexpected result from node selection: "{node}"'
-                    f"Expected a source or a node!"
+                    f"Listing this node type is not yet supported!"
                 )
 
     def generate_selectors(self):
@@ -96,6 +109,14 @@ class ListTask(GraphRunnableTask):
                 # metrics are searched for by pkg.metric_name
                 metric_selector = ".".join([node.package_name, node.name])
                 yield f"metric:{metric_selector}"
+            elif node.resource_type == NodeType.SavedQuery:
+                assert isinstance(node, SavedQuery)
+                saved_query_selector = ".".join([node.package_name, node.name])
+                yield f"saved_query:{saved_query_selector}"
+            elif node.resource_type == NodeType.SemanticModel:
+                assert isinstance(node, SemanticModel)
+                semantic_model_selector = ".".join([node.package_name, node.name])
+                yield f"semantic_model:{semantic_model_selector}"
             else:
                 # everything else is from `fqn`
                 yield ".".join(node.fqn)
@@ -123,20 +144,23 @@ class ListTask(GraphRunnableTask):
             yield node.original_file_path
 
     def run(self):
-        self.compile_manifest()
-        output = self.args.output
-        if output == "selector":
-            generator = self.generate_selectors
-        elif output == "name":
-            generator = self.generate_names
-        elif output == "json":
-            generator = self.generate_json
-        elif output == "path":
-            generator = self.generate_paths
-        else:
-            raise DbtInternalError("Invalid output {}".format(output))
+        # We set up a context manager here with "task_contextvars" because we
+        # we need the project_root in compile_manifest.
+        with task_contextvars(project_root=self.config.project_root):
+            self.compile_manifest()
+            output = self.args.output
+            if output == "selector":
+                generator = self.generate_selectors
+            elif output == "name":
+                generator = self.generate_names
+            elif output == "json":
+                generator = self.generate_json
+            elif output == "path":
+                generator = self.generate_paths
+            else:
+                raise DbtInternalError("Invalid output {}".format(output))
 
-        return self.output_results(generator())
+            return self.output_results(generator())
 
     def output_results(self, results):
         """Log, or output a plain, newline-delimited, and ready-to-pipe list of nodes found."""
@@ -194,6 +218,7 @@ class ListTask(GraphRunnableTask):
                 manifest=self.manifest,
                 previous_state=self.previous_state,
                 resource_types=self.resource_types,
+                include_empty_nodes=True,
             )
 
     def interpret_results(self, results):

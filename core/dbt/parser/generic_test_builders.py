@@ -101,6 +101,7 @@ class TestBuilder(Generic[Testable]):
         "error_if",
         "fail_calc",
         "store_failures",
+        "store_failures_as",
         "meta",
         "database",
         "schema",
@@ -113,7 +114,7 @@ class TestBuilder(Generic[Testable]):
         target: Testable,
         package_name: str,
         render_ctx: Dict[str, Any],
-        column_name: str = None,
+        column_name: Optional[str] = None,
         version: Optional[NodeVersion] = None,
     ) -> None:
         test_name, test_args = self.extract_test_args(test, column_name)
@@ -243,6 +244,10 @@ class TestBuilder(Generic[Testable]):
         return self.config.get("store_failures")
 
     @property
+    def store_failures_as(self) -> Optional[bool]:
+        return self.config.get("store_failures_as")
+
+    @property
     def where(self) -> Optional[str]:
         return self.config.get("where")
 
@@ -294,6 +299,8 @@ class TestBuilder(Generic[Testable]):
             config["fail_calc"] = self.fail_calc
         if self.store_failures is not None:
             config["store_failures"] = self.store_failures
+        if self.store_failures_as is not None:
+            config["store_failures_as"] = self.store_failures_as
         if self.meta is not None:
             config["meta"] = self.meta
         if self.database is not None:

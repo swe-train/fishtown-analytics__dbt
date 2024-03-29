@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Set, FrozenSet
 
 from dbt.adapters.base.relation import BaseRelation
@@ -7,6 +7,7 @@ from dbt.adapters.relation_configs import (
     RelationResults,
 )
 from dbt.context.providers import RuntimeConfigObject
+from dbt.contracts.relation import RelationType
 from dbt.exceptions import DbtRuntimeError
 
 from dbt.adapters.postgres.relation_configs import (
@@ -20,6 +21,25 @@ from dbt.adapters.postgres.relation_configs import (
 
 @dataclass(frozen=True, eq=False, repr=False)
 class PostgresRelation(BaseRelation):
+    renameable_relations: FrozenSet[RelationType] = field(
+        default_factory=lambda: frozenset(
+            {
+                RelationType.View,
+                RelationType.Table,
+                RelationType.MaterializedView,
+            }
+        )
+    )
+
+    replaceable_relations: FrozenSet[RelationType] = field(
+        default_factory=lambda: frozenset(
+            {
+                RelationType.View,
+                RelationType.Table,
+            }
+        )
+    )
+
     def __post_init__(self):
         # Check for length of Postgres table/view names.
         # Check self.type to exclude test relation identifiers

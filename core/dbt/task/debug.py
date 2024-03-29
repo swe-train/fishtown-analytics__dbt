@@ -6,6 +6,7 @@ import sys
 
 from collections import namedtuple
 from enum import Flag
+from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from dbt.events.functions import fire_event
@@ -74,7 +75,7 @@ class DebugRunStatus(Flag):
 
 
 class DebugTask(BaseTask):
-    def __init__(self, args, config):
+    def __init__(self, args, config) -> None:
         super().__init__(args, config)
         self.profiles_dir = args.PROFILES_DIR
         self.profile_path = os.path.join(self.profiles_dir, "profiles.yml")
@@ -86,7 +87,7 @@ class DebugTask(BaseTask):
             if args.project_dir:
                 self.project_dir = args.project_dir
             else:
-                self.project_dir = os.getcwd()
+                self.project_dir = Path.cwd()
         self.project_path = os.path.join(self.project_dir, "dbt_project.yml")
         self.cli_vars: Dict[str, Any] = args.vars
 
@@ -102,13 +103,14 @@ class DebugTask(BaseTask):
             return None
         return self.project.profile_name
 
-    def path_info(self):
-        open_cmd = dbt.clients.system.open_dir_cmd()
-        fire_event(OpenCommand(open_cmd=open_cmd, profiles_dir=self.profiles_dir))
-
     def run(self) -> bool:
+        # WARN: this is a legacy workflow that is not compatible with other runtime flags
         if self.args.config_dir:
-            self.path_info()
+            fire_event(
+                OpenCommand(
+                    open_cmd=dbt.clients.system.open_dir_cmd(), profiles_dir=str(self.profiles_dir)
+                )
+            )
             return DebugRunStatus.SUCCESS.value
 
         version: str = get_installed_version().to_version_string(skip_matcher=True)
@@ -148,13 +150,14 @@ class DebugTask(BaseTask):
             dependencies_statuses = self.test_dependencies()
 
         # Test connection
-        self.test_connection()
+        connection_status = self.test_connection()
 
         # Log messages from any fails
         all_statuses: List[SubtaskStatus] = [
             load_profile_status,
             load_project_status,
             *dependencies_statuses,
+            connection_status,
         ]
         all_failing_statuses: List[SubtaskStatus] = list(
             filter(lambda status: status.run_status == RunStatus.Error, all_statuses)
@@ -338,7 +341,7 @@ class DebugTask(BaseTask):
 
         try:
             self.project = Project.from_project_root(
-                self.project_dir,
+                str(self.project_dir),
                 renderer,
                 verify_version=self.args.VERSION_CHECK,
             )

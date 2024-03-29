@@ -1,16 +1,30 @@
 import builtins
 import json
+import os
 import re
 import io
 import agate
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 
+from dbt.constants import SECRET_ENV_PREFIX
 from dbt.dataclass_schema import ValidationError
-from dbt.events.helpers import env_secrets, scrub_secrets
-from dbt.node_types import NodeType
+from dbt.node_types import NodeType, AccessType
 from dbt.ui import line_wrap_message
 
 import dbt.dataclass_schema
+
+
+def env_secrets() -> List[str]:
+    return [v for k, v in os.environ.items() if k.startswith(SECRET_ENV_PREFIX) and v.strip()]
+
+
+def scrub_secrets(msg: str, secrets: List[str]) -> str:
+    scrubbed = str(msg)
+
+    for secret in secrets:
+        scrubbed = scrubbed.replace(secret, "*****")
+
+    return scrubbed
 
 
 class MacroReturn(builtins.BaseException):
@@ -20,7 +34,7 @@ class MacroReturn(builtins.BaseException):
     It's how we return a value from a macro.
     """
 
-    def __init__(self, value):
+    def __init__(self, value) -> None:
         self.value = value
 
 
@@ -37,7 +51,7 @@ class Exception(builtins.Exception):
 
 
 class DbtInternalError(Exception):
-    def __init__(self, msg: str):
+    def __init__(self, msg: str) -> None:
         self.stack: List = []
         self.msg = scrub_secrets(msg, env_secrets())
 
@@ -81,7 +95,7 @@ class DbtRuntimeError(RuntimeError, Exception):
     CODE = 10001
     MESSAGE = "Runtime error"
 
-    def __init__(self, msg: str, node=None):
+    def __init__(self, msg: str, node=None) -> None:
         self.stack: List = []
         self.node = node
         self.msg = scrub_secrets(msg, env_secrets())
@@ -213,67 +227,22 @@ class ContractBreakingChangeError(DbtRuntimeError):
 
     def __init__(
         self,
-        contract_enforced_disabled: bool,
-        columns_removed: List[str],
-        column_type_changes: List[Tuple[str, str, str]],
-        enforced_column_constraint_removed: List[Tuple[str, str]],
-        enforced_model_constraint_removed: List[Tuple[str, List[str]]],
-        materialization_changed: List[str],
+        breaking_changes: List[str],
         node=None,
-    ):
-        self.contract_enforced_disabled = contract_enforced_disabled
-        self.columns_removed = columns_removed
-        self.column_type_changes = column_type_changes
-        self.enforced_column_constraint_removed = enforced_column_constraint_removed
-        self.enforced_model_constraint_removed = enforced_model_constraint_removed
-        self.materialization_changed = materialization_changed
+    ) -> None:
+        self.breaking_changes = breaking_changes
         super().__init__(self.message(), node)
 
     @property
     def type(self):
-        return "Breaking Change to Contract"
+        return "Breaking change to contract"
 
     def message(self):
-        breaking_changes = []
-        if self.contract_enforced_disabled:
-            breaking_changes.append("The contract's enforcement has been disabled.")
-        if self.columns_removed:
-            columns_removed_str = "\n  - ".join(self.columns_removed)
-            breaking_changes.append(f"Columns were removed: \n - {columns_removed_str}")
-        if self.column_type_changes:
-            column_type_changes_str = "\n  - ".join(
-                [f"{c[0]} ({c[1]} -> {c[2]})" for c in self.column_type_changes]
-            )
-            breaking_changes.append(
-                f"Columns with data_type changes: \n - {column_type_changes_str}"
-            )
-        if self.enforced_column_constraint_removed:
-            column_constraint_changes_str = "\n  - ".join(
-                [f"{c[0]} ({c[1]})" for c in self.enforced_column_constraint_removed]
-            )
-            breaking_changes.append(
-                f"Enforced column level constraints were removed: \n - {column_constraint_changes_str}"
-            )
-        if self.enforced_model_constraint_removed:
-            model_constraint_changes_str = "\n  - ".join(
-                [f"{c[0]} -> {c[1]}" for c in self.enforced_model_constraint_removed]
-            )
-            breaking_changes.append(
-                f"Enforced model level constraints were removed: \n - {model_constraint_changes_str}"
-            )
-        if self.materialization_changed:
-            materialization_changes_str = "\n  - ".join(
-                f"{self.materialization_changed[0]} -> {self.materialization_changed[1]}"
-            )
-            breaking_changes.append(
-                f"Materialization changed with enforced constraints: \n - {materialization_changes_str}"
-            )
-
-        reasons = "\n\n".join(breaking_changes)
+        reasons = "\n  - ".join(self.breaking_changes)
 
         return (
             "While comparing to previous project state, dbt detected a breaking change to an enforced contract."
-            f"\n\n{reasons}\n\n"
+            f"\n  - {reasons}\n"
             "Consider making an additive (non-breaking) change instead, if possible.\n"
             "Otherwise, create a new model version: https://docs.getdbt.com/docs/collaborate/govern/model-versions"
         )
@@ -297,9 +266,14 @@ class ParsingError(DbtRuntimeError):
         return "Parsing"
 
 
+class dbtPluginError(DbtRuntimeError):
+    CODE = 10020
+    MESSAGE = "Plugin Error"
+
+
 # TODO: this isn't raised in the core codebase.  Is it raised elsewhere?
 class JSONValidationError(DbtValidationError):
-    def __init__(self, typename, errors):
+    def __init__(self, typename, errors) -> None:
         self.typename = typename
         self.errors = errors
         self.errors_message = ", ".join(errors)
@@ -312,7 +286,7 @@ class JSONValidationError(DbtValidationError):
 
 
 class IncompatibleSchemaError(DbtRuntimeError):
-    def __init__(self, expected: str, found: Optional[str] = None):
+    def __init__(self, expected: str, found: Optional[str] = None) -> None:
         self.expected = expected
         self.found = found
         self.filename = "input file"
@@ -366,7 +340,7 @@ class DbtConfigError(DbtRuntimeError):
     CODE = 10007
     MESSAGE = "DBT Configuration Error"
 
-    def __init__(self, msg: str, project=None, result_type="invalid_project", path=None):
+    def __init__(self, msg: str, project=None, result_type="invalid_project", path=None) -> None:
         self.project = project
         super().__init__(msg)
         self.result_type = result_type
@@ -384,7 +358,7 @@ class FailFastError(DbtRuntimeError):
     CODE = 10013
     MESSAGE = "FailFast Error"
 
-    def __init__(self, msg: str, result=None, node=None):
+    def __init__(self, msg: str, result=None, node=None) -> None:
         super().__init__(msg=msg, node=node)
         self.result = result
 
@@ -405,21 +379,8 @@ class DbtProfileError(DbtConfigError):
     pass
 
 
-class PublicationConfigNotFound(DbtConfigError):
-    def __init__(self, project=None, file_name=None):
-        self.project = project
-        msg = self.message()
-        super().__init__(msg, project=project)
-
-    def message(self):
-        return (
-            f"A dependency on project {self.project} was specified, "
-            f"but a publication for {self.project} was not found."
-        )
-
-
 class SemverError(Exception):
-    def __init__(self, msg: str = None):
+    def __init__(self, msg: Optional[str] = None) -> None:
         self.msg = msg
         if msg is not None:
             super().__init__(msg)
@@ -432,7 +393,7 @@ class VersionsNotCompatibleError(SemverError):
 
 
 class NotImplementedError(Exception):
-    def __init__(self, msg: str):
+    def __init__(self, msg: str) -> None:
         self.msg = msg
         self.formatted_msg = f"ERROR: {self.msg}"
         super().__init__(self.formatted_msg)
@@ -443,7 +404,7 @@ class FailedToConnectError(DbtDatabaseError):
 
 
 class CommandError(DbtRuntimeError):
-    def __init__(self, cwd: str, cmd: List[str], msg: str = "Error running command"):
+    def __init__(self, cwd: str, cmd: List[str], msg: str = "Error running command") -> None:
         cmd_scrubbed = list(scrub_secrets(cmd_txt, env_secrets()) for cmd_txt in cmd)
         super().__init__(msg)
         self.cwd = cwd
@@ -457,12 +418,12 @@ class CommandError(DbtRuntimeError):
 
 
 class ExecutableError(CommandError):
-    def __init__(self, cwd: str, cmd: List[str], msg: str):
+    def __init__(self, cwd: str, cmd: List[str], msg: str) -> None:
         super().__init__(cwd, cmd, msg)
 
 
 class WorkingDirectoryError(CommandError):
-    def __init__(self, cwd: str, cmd: List[str], msg: str):
+    def __init__(self, cwd: str, cmd: List[str], msg: str) -> None:
         super().__init__(cwd, cmd, msg)
 
     def __str__(self):
@@ -478,7 +439,7 @@ class CommandResultError(CommandError):
         stdout: bytes,
         stderr: bytes,
         msg: str = "Got a non-zero returncode",
-    ):
+    ) -> None:
         super().__init__(cwd, cmd, msg)
         self.returncode = returncode
         self.stdout = scrub_secrets(stdout.decode("utf-8"), env_secrets())
@@ -490,16 +451,16 @@ class CommandResultError(CommandError):
 
 
 class InvalidConnectionError(DbtRuntimeError):
-    def __init__(self, thread_id, known: List):
+    def __init__(self, thread_id, known: List) -> None:
         self.thread_id = thread_id
         self.known = known
         super().__init__(
-            msg="connection never acquired for thread {self.thread_id}, have {self.known}"
+            msg=f"connection never acquired for thread {self.thread_id}, have {self.known}"
         )
 
 
 class InvalidSelectorError(DbtRuntimeError):
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.name = name
         super().__init__(name)
 
@@ -519,7 +480,7 @@ class ConnectionError(Exception):
 
 # event level exception
 class EventCompilationError(CompilationError):
-    def __init__(self, msg: str, node):
+    def __init__(self, msg: str, node) -> None:
         self.msg = scrub_secrets(msg, env_secrets())
         self.node = node
         super().__init__(msg=self.msg)
@@ -527,7 +488,7 @@ class EventCompilationError(CompilationError):
 
 # compilation level exceptions
 class GraphDependencyNotFoundError(CompilationError):
-    def __init__(self, node, dependency: str):
+    def __init__(self, node, dependency: str) -> None:
         self.node = node
         self.dependency = dependency
         super().__init__(msg=self.get_message())
@@ -541,21 +502,21 @@ class GraphDependencyNotFoundError(CompilationError):
 
 
 class NoSupportedLanguagesFoundError(CompilationError):
-    def __init__(self, node):
+    def __init__(self, node) -> None:
         self.node = node
         self.msg = f"No supported_languages found in materialization macro {self.node.name}"
         super().__init__(msg=self.msg)
 
 
 class MaterializtionMacroNotUsedError(CompilationError):
-    def __init__(self, node):
+    def __init__(self, node) -> None:
         self.node = node
         self.msg = "Only materialization macros can be used with this function"
         super().__init__(msg=self.msg)
 
 
 class UndefinedCompilationError(CompilationError):
-    def __init__(self, name: str, node):
+    def __init__(self, name: str, node) -> None:
         self.name = name
         self.node = node
         self.msg = f"{self.name} is undefined"
@@ -563,20 +524,20 @@ class UndefinedCompilationError(CompilationError):
 
 
 class CaughtMacroErrorWithNodeError(CompilationError):
-    def __init__(self, exc, node):
+    def __init__(self, exc, node) -> None:
         self.exc = exc
         self.node = node
         super().__init__(msg=str(exc))
 
 
 class CaughtMacroError(CompilationError):
-    def __init__(self, exc):
+    def __init__(self, exc) -> None:
         self.exc = exc
         super().__init__(msg=str(exc))
 
 
 class MacroNameNotStringError(CompilationError):
-    def __init__(self, kwarg_value):
+    def __init__(self, kwarg_value) -> None:
         self.kwarg_value = kwarg_value
         super().__init__(msg=self.get_message())
 
@@ -589,7 +550,7 @@ class MacroNameNotStringError(CompilationError):
 
 
 class MissingControlFlowStartTagError(CompilationError):
-    def __init__(self, tag, expected_tag: str, tag_parser):
+    def __init__(self, tag, expected_tag: str, tag_parser) -> None:
         self.tag = tag
         self.expected_tag = expected_tag
         self.tag_parser = tag_parser
@@ -605,7 +566,7 @@ class MissingControlFlowStartTagError(CompilationError):
 
 
 class UnexpectedControlFlowEndTagError(CompilationError):
-    def __init__(self, tag, expected_tag: str, tag_parser):
+    def __init__(self, tag, expected_tag: str, tag_parser) -> None:
         self.tag = tag
         self.expected_tag = expected_tag
         self.tag_parser = tag_parser
@@ -621,7 +582,7 @@ class UnexpectedControlFlowEndTagError(CompilationError):
 
 
 class UnexpectedMacroEOFError(CompilationError):
-    def __init__(self, expected_name: str, actual_name: str):
+    def __init__(self, expected_name: str, actual_name: str) -> None:
         self.expected_name = expected_name
         self.actual_name = actual_name
         super().__init__(msg=self.get_message())
@@ -632,7 +593,7 @@ class UnexpectedMacroEOFError(CompilationError):
 
 
 class MacroNamespaceNotStringError(CompilationError):
-    def __init__(self, kwarg_type: Any):
+    def __init__(self, kwarg_type: Any) -> None:
         self.kwarg_type = kwarg_type
         super().__init__(msg=self.get_message())
 
@@ -645,7 +606,7 @@ class MacroNamespaceNotStringError(CompilationError):
 
 
 class NestedTagsError(CompilationError):
-    def __init__(self, outer, inner):
+    def __init__(self, outer, inner) -> None:
         self.outer = outer
         self.inner = inner
         super().__init__(msg=self.get_message())
@@ -660,7 +621,7 @@ class NestedTagsError(CompilationError):
 
 
 class BlockDefinitionNotAtTopError(CompilationError):
-    def __init__(self, tag_parser, tag_start):
+    def __init__(self, tag_parser, tag_start) -> None:
         self.tag_parser = tag_parser
         self.tag_start = tag_start
         super().__init__(msg=self.get_message())
@@ -675,7 +636,7 @@ class BlockDefinitionNotAtTopError(CompilationError):
 
 
 class MissingCloseTagError(CompilationError):
-    def __init__(self, block_type_name: str, linecount: int):
+    def __init__(self, block_type_name: str, linecount: int) -> None:
         self.block_type_name = block_type_name
         self.linecount = linecount
         super().__init__(msg=self.get_message())
@@ -686,7 +647,7 @@ class MissingCloseTagError(CompilationError):
 
 
 class UnknownGitCloningProblemError(DbtRuntimeError):
-    def __init__(self, repo: str):
+    def __init__(self, repo: str) -> None:
         self.repo = scrub_secrets(repo, env_secrets())
         super().__init__(msg=self.get_message())
 
@@ -699,16 +660,16 @@ class UnknownGitCloningProblemError(DbtRuntimeError):
 
 
 class NoAdaptersAvailableError(DbtRuntimeError):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(msg=self.get_message())
 
     def get_message(self) -> str:
-        msg = "No adapters available. Learn how to install an adapter by going to https://docs.getdbt.com/docs/supported-data-platforms#adapter-installation"
+        msg = "No adapters available. Learn how to install an adapter by going to https://docs.getdbt.com/docs/connect-adapters#install-using-the-cli"
         return msg
 
 
 class BadSpecError(DbtInternalError):
-    def __init__(self, repo, revision, error):
+    def __init__(self, repo, revision, error) -> None:
         self.repo = repo
         self.revision = revision
         self.stderr = scrub_secrets(error.stderr.strip(), env_secrets())
@@ -720,7 +681,7 @@ class BadSpecError(DbtInternalError):
 
 
 class GitCloningError(DbtInternalError):
-    def __init__(self, repo: str, revision: str, error: CommandResultError):
+    def __init__(self, repo: str, revision: str, error: CommandResultError) -> None:
         self.repo = repo
         self.revision = revision
         self.error = error
@@ -743,7 +704,7 @@ class GitCheckoutError(BadSpecError):
 
 
 class MaterializationArgError(CompilationError):
-    def __init__(self, name: str, argument: str):
+    def __init__(self, name: str, argument: str) -> None:
         self.name = name
         self.argument = argument
         super().__init__(msg=self.get_message())
@@ -754,7 +715,7 @@ class MaterializationArgError(CompilationError):
 
 
 class OperationError(CompilationError):
-    def __init__(self, operation_name):
+    def __init__(self, operation_name) -> None:
         self.operation_name = operation_name
         super().__init__(msg=self.get_message())
 
@@ -769,7 +730,7 @@ class OperationError(CompilationError):
 
 
 class SymbolicLinkError(CompilationError):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(msg=self.get_message())
 
     def get_message(self) -> str:
@@ -784,21 +745,21 @@ class SymbolicLinkError(CompilationError):
 
 # context level exceptions
 class ZipStrictWrongTypeError(CompilationError):
-    def __init__(self, exc):
+    def __init__(self, exc) -> None:
         self.exc = exc
         msg = str(self.exc)
         super().__init__(msg=msg)
 
 
 class SetStrictWrongTypeError(CompilationError):
-    def __init__(self, exc):
+    def __init__(self, exc) -> None:
         self.exc = exc
         msg = str(self.exc)
         super().__init__(msg=msg)
 
 
 class LoadAgateTableValueError(CompilationError):
-    def __init__(self, exc: ValueError, node):
+    def __init__(self, exc: ValueError, node) -> None:
         self.exc = exc
         self.node = node
         msg = str(self.exc)
@@ -806,7 +767,7 @@ class LoadAgateTableValueError(CompilationError):
 
 
 class LoadAgateTableNotSeedError(CompilationError):
-    def __init__(self, resource_type, node):
+    def __init__(self, resource_type, node) -> None:
         self.resource_type = resource_type
         self.node = node
         msg = f"can only load_agate_table for seeds (got a {self.resource_type})"
@@ -814,14 +775,14 @@ class LoadAgateTableNotSeedError(CompilationError):
 
 
 class MacrosSourcesUnWriteableError(CompilationError):
-    def __init__(self, node):
+    def __init__(self, node) -> None:
         self.node = node
         msg = 'cannot "write" macros or sources'
         super().__init__(msg=msg)
 
 
 class PackageNotInDepsError(CompilationError):
-    def __init__(self, package_name: str, node):
+    def __init__(self, package_name: str, node) -> None:
         self.package_name = package_name
         self.node = node
         msg = f"Node package named {self.package_name} not found!"
@@ -829,7 +790,7 @@ class PackageNotInDepsError(CompilationError):
 
 
 class OperationsCannotRefEphemeralNodesError(CompilationError):
-    def __init__(self, target_name: str, node):
+    def __init__(self, target_name: str, node) -> None:
         self.target_name = target_name
         self.node = node
         msg = f"Operations can not ref() ephemeral nodes, but {target_name} is ephemeral"
@@ -837,7 +798,7 @@ class OperationsCannotRefEphemeralNodesError(CompilationError):
 
 
 class PersistDocsValueTypeError(CompilationError):
-    def __init__(self, persist_docs: Any):
+    def __init__(self, persist_docs: Any) -> None:
         self.persist_docs = persist_docs
         msg = (
             "Invalid value provided for 'persist_docs'. Expected dict "
@@ -847,14 +808,14 @@ class PersistDocsValueTypeError(CompilationError):
 
 
 class InlineModelConfigError(CompilationError):
-    def __init__(self, node):
+    def __init__(self, node) -> None:
         self.node = node
         msg = "Invalid inline model config"
         super().__init__(msg=msg)
 
 
 class ConflictingConfigKeysError(CompilationError):
-    def __init__(self, oldkey: str, newkey: str, node):
+    def __init__(self, oldkey: str, newkey: str, node) -> None:
         self.oldkey = oldkey
         self.newkey = newkey
         self.node = node
@@ -863,7 +824,7 @@ class ConflictingConfigKeysError(CompilationError):
 
 
 class NumberSourceArgsError(CompilationError):
-    def __init__(self, args, node):
+    def __init__(self, args, node) -> None:
         self.args = args
         self.node = node
         msg = f"source() takes exactly two arguments ({len(self.args)} given)"
@@ -871,7 +832,7 @@ class NumberSourceArgsError(CompilationError):
 
 
 class RequiredVarNotFoundError(CompilationError):
-    def __init__(self, var_name: str, merged: Dict, node):
+    def __init__(self, var_name: str, merged: Dict, node) -> None:
         self.var_name = var_name
         self.merged = merged
         self.node = node
@@ -891,14 +852,14 @@ class RequiredVarNotFoundError(CompilationError):
 
 
 class PackageNotFoundForMacroError(CompilationError):
-    def __init__(self, package_name: str):
+    def __init__(self, package_name: str) -> None:
         self.package_name = package_name
         msg = f"Could not find package '{self.package_name}'"
         super().__init__(msg=msg)
 
 
 class SecretEnvVarLocationError(ParsingError):
-    def __init__(self, env_var_name: str):
+    def __init__(self, env_var_name: str) -> None:
         self.env_var_name = env_var_name
         super().__init__(msg=self.get_message())
 
@@ -910,21 +871,8 @@ class SecretEnvVarLocationError(ParsingError):
         return msg
 
 
-class ProjectDependencyCycleError(ParsingError):
-    def __init__(self, pub_project_name, project_name):
-        self.pub_project_name = pub_project_name
-        self.project_name = project_name
-        super().__init__(msg=self.get_message())
-
-    def get_message(self) -> str:
-        return (
-            f"A project dependency cycle has been detected. The current project {self.project_name} "
-            f"depends on {self.pub_project_name} which also depends on the current project."
-        )
-
-
 class MacroArgTypeError(CompilationError):
-    def __init__(self, method_name: str, arg_name: str, got_value: Any, expected_type):
+    def __init__(self, method_name: str, arg_name: str, got_value: Any, expected_type) -> None:
         self.method_name = method_name
         self.arg_name = arg_name
         self.got_value = got_value
@@ -942,7 +890,7 @@ class MacroArgTypeError(CompilationError):
 
 
 class BooleanError(CompilationError):
-    def __init__(self, return_value: Any, macro_name: str):
+    def __init__(self, return_value: Any, macro_name: str) -> None:
         self.return_value = return_value
         self.macro_name = macro_name
         super().__init__(msg=self.get_message())
@@ -956,7 +904,7 @@ class BooleanError(CompilationError):
 
 
 class RefArgsError(CompilationError):
-    def __init__(self, node, args):
+    def __init__(self, node, args) -> None:
         self.node = node
         self.args = args
         super().__init__(msg=self.get_message())
@@ -967,7 +915,7 @@ class RefArgsError(CompilationError):
 
 
 class MetricArgsError(CompilationError):
-    def __init__(self, node, args):
+    def __init__(self, node, args) -> None:
         self.node = node
         self.args = args
         super().__init__(msg=self.get_message())
@@ -978,7 +926,7 @@ class MetricArgsError(CompilationError):
 
 
 class RefBadContextError(CompilationError):
-    def __init__(self, node, args):
+    def __init__(self, node, args) -> None:
         self.node = node
         self.args = args.positional_args  # type: ignore
         self.kwargs = args.keyword_args  # type: ignore
@@ -1016,7 +964,7 @@ To fix this, add the following hint to the top of the model "{model_name}":
 
 
 class DocArgsError(CompilationError):
-    def __init__(self, node, args):
+    def __init__(self, node, args) -> None:
         self.node = node
         self.args = args
         super().__init__(msg=self.get_message())
@@ -1027,7 +975,9 @@ class DocArgsError(CompilationError):
 
 
 class DocTargetNotFoundError(CompilationError):
-    def __init__(self, node, target_doc_name: str, target_doc_package: Optional[str] = None):
+    def __init__(
+        self, node, target_doc_name: str, target_doc_package: Optional[str] = None
+    ) -> None:
         self.node = node
         self.target_doc_name = target_doc_name
         self.target_doc_package = target_doc_package
@@ -1042,7 +992,7 @@ class DocTargetNotFoundError(CompilationError):
 
 
 class MacroDispatchArgError(CompilationError):
-    def __init__(self, macro_name: str):
+    def __init__(self, macro_name: str) -> None:
         self.macro_name = macro_name
         super().__init__(msg=self.get_message())
 
@@ -1061,7 +1011,7 @@ class MacroDispatchArgError(CompilationError):
 
 
 class DuplicateMacroNameError(CompilationError):
-    def __init__(self, node_1, node_2, namespace: str):
+    def __init__(self, node_1, node_2, namespace: str) -> None:
         self.node_1 = node_1
         self.node_2 = node_2
         self.namespace = namespace
@@ -1086,7 +1036,7 @@ class DuplicateMacroNameError(CompilationError):
 
 
 class MacroResultAlreadyLoadedError(CompilationError):
-    def __init__(self, result_name):
+    def __init__(self, result_name) -> None:
         self.result_name = result_name
         super().__init__(msg=self.get_message())
 
@@ -1098,7 +1048,7 @@ class MacroResultAlreadyLoadedError(CompilationError):
 
 # parser level exceptions
 class DictParseError(ParsingError):
-    def __init__(self, exc: ValidationError, node):
+    def __init__(self, exc: ValidationError, node) -> None:
         self.exc = exc
         self.node = node
         msg = self.validator_error_message(exc)
@@ -1106,7 +1056,7 @@ class DictParseError(ParsingError):
 
 
 class ConfigUpdateError(ParsingError):
-    def __init__(self, exc: ValidationError, node):
+    def __init__(self, exc: ValidationError, node) -> None:
         self.exc = exc
         self.node = node
         msg = self.validator_error_message(exc)
@@ -1114,7 +1064,7 @@ class ConfigUpdateError(ParsingError):
 
 
 class PythonParsingError(ParsingError):
-    def __init__(self, exc: SyntaxError, node):
+    def __init__(self, exc: SyntaxError, node) -> None:
         self.exc = exc
         self.node = node
         super().__init__(msg=self.get_message())
@@ -1126,7 +1076,7 @@ class PythonParsingError(ParsingError):
 
 
 class PythonLiteralEvalError(ParsingError):
-    def __init__(self, exc: Exception, node):
+    def __init__(self, exc: Exception, node) -> None:
         self.exc = exc
         self.node = node
         super().__init__(msg=self.get_message())
@@ -1142,7 +1092,7 @@ class PythonLiteralEvalError(ParsingError):
 
 
 class ModelConfigError(ParsingError):
-    def __init__(self, exc: ValidationError, node):
+    def __init__(self, exc: ValidationError, node) -> None:
         self.msg = self.validator_error_message(exc)
         self.node = node
         super().__init__(msg=self.msg)
@@ -1155,7 +1105,7 @@ class YamlParseListError(ParsingError):
         key: str,
         yaml_data: List,
         cause,
-    ):
+    ) -> None:
         self.path = path
         self.key = key
         self.yaml_data = yaml_data
@@ -1180,7 +1130,7 @@ class YamlParseDictError(ParsingError):
         key: str,
         yaml_data: Dict[str, Any],
         cause,
-    ):
+    ) -> None:
         self.path = path
         self.key = key
         self.yaml_data = yaml_data
@@ -1204,7 +1154,7 @@ class YamlLoadError(ParsingError):
         path: str,
         exc: DbtValidationError,
         project_name: Optional[str] = None,
-    ):
+    ) -> None:
         self.project_name = project_name
         self.path = path
         self.exc = exc
@@ -1219,42 +1169,46 @@ class YamlLoadError(ParsingError):
 
 
 class TestConfigError(ParsingError):
-    def __init__(self, exc: ValidationError, node):
+    def __init__(self, exc: ValidationError, node) -> None:
         self.msg = self.validator_error_message(exc)
         self.node = node
         super().__init__(msg=self.msg)
 
 
 class SchemaConfigError(ParsingError):
-    def __init__(self, exc: ValidationError, node):
+    def __init__(self, exc: ValidationError, node) -> None:
         self.msg = self.validator_error_message(exc)
         self.node = node
         super().__init__(msg=self.msg)
 
 
 class SnapshopConfigError(ParsingError):
-    def __init__(self, exc: ValidationError, node):
+    def __init__(self, exc: ValidationError, node) -> None:
         self.msg = self.validator_error_message(exc)
         self.node = node
         super().__init__(msg=self.msg)
 
 
 class DbtReferenceError(ParsingError):
-    def __init__(self, unique_id: str, ref_unique_id: str, group: str):
+    def __init__(self, unique_id: str, ref_unique_id: str, access: AccessType, scope: str) -> None:
         self.unique_id = unique_id
         self.ref_unique_id = ref_unique_id
-        self.group = group
+        self.access = access
+        self.scope = scope
+        self.scope_type = "group" if self.access == AccessType.Private else "package"
         super().__init__(msg=self.get_message())
 
     def get_message(self) -> str:
         return (
             f"Node {self.unique_id} attempted to reference node {self.ref_unique_id}, "
-            f"which is not allowed because the referenced node is private to the {self.group} group."
+            f"which is not allowed because the referenced node is {self.access} to the '{self.scope}' {self.scope_type}."
         )
 
 
 class InvalidAccessTypeError(ParsingError):
-    def __init__(self, unique_id: str, field_value: str, materialization: Optional[str] = None):
+    def __init__(
+        self, unique_id: str, field_value: str, materialization: Optional[str] = None
+    ) -> None:
         self.unique_id = unique_id
         self.field_value = field_value
         self.materialization = materialization
@@ -1267,19 +1221,19 @@ class InvalidAccessTypeError(ParsingError):
 
 
 class SameKeyNestedError(CompilationError):
-    def __init__(self):
+    def __init__(self) -> None:
         msg = "Test cannot have the same key at the top-level and in config"
         super().__init__(msg=msg)
 
 
 class TestArgIncludesModelError(CompilationError):
-    def __init__(self):
+    def __init__(self) -> None:
         msg = 'Test arguments include "model", which is a reserved argument'
         super().__init__(msg=msg)
 
 
 class UnexpectedTestNamePatternError(CompilationError):
-    def __init__(self, test_name: str):
+    def __init__(self, test_name: str) -> None:
         self.test_name = test_name
         msg = f"Test name string did not match expected pattern: {self.test_name}"
         super().__init__(msg=msg)
@@ -1293,7 +1247,7 @@ class CustomMacroPopulatingConfigValueError(CompilationError):
         key: str,
         err_msg: str,
         column_name: Optional[str] = None,
-    ):
+    ) -> None:
         self.target_name = target_name
         self.column_name = column_name
         self.name = name
@@ -1323,21 +1277,21 @@ class CustomMacroPopulatingConfigValueError(CompilationError):
 
 
 class TagsNotListOfStringsError(CompilationError):
-    def __init__(self, tags: Any):
+    def __init__(self, tags: Any) -> None:
         self.tags = tags
         msg = f"got {self.tags} ({type(self.tags)}) for tags, expected a list of strings"
         super().__init__(msg=msg)
 
 
 class TagNotStringError(CompilationError):
-    def __init__(self, tag: Any):
+    def __init__(self, tag: Any) -> None:
         self.tag = tag
         msg = f"got {self.tag} ({type(self.tag)}) for tag, expected a str"
         super().__init__(msg=msg)
 
 
 class TestNameNotStringError(ParsingError):
-    def __init__(self, test_name: Any):
+    def __init__(self, test_name: Any) -> None:
         self.test_name = test_name
         super().__init__(msg=self.get_message())
 
@@ -1348,7 +1302,7 @@ class TestNameNotStringError(ParsingError):
 
 
 class TestArgsNotDictError(ParsingError):
-    def __init__(self, test_args: Any):
+    def __init__(self, test_args: Any) -> None:
         self.test_args = test_args
         super().__init__(msg=self.get_message())
 
@@ -1843,17 +1797,19 @@ class UninstalledPackagesFoundError(CompilationError):
         self,
         count_packages_specified: int,
         count_packages_installed: int,
+        packages_specified_path: str,
         packages_install_path: str,
     ):
         self.count_packages_specified = count_packages_specified
         self.count_packages_installed = count_packages_installed
+        self.packages_specified_path = packages_specified_path
         self.packages_install_path = packages_install_path
         super().__init__(msg=self.get_message())
 
     def get_message(self) -> str:
         msg = (
             f"dbt found {self.count_packages_specified} package(s) "
-            "specified in packages.yml, but only "
+            f"specified in {self.packages_specified_path}, but only "
             f"{self.count_packages_installed} package(s) installed "
             f'in {self.packages_install_path}. Run "dbt deps" to '
             "install package dependencies."
@@ -2347,6 +2303,11 @@ class ContractError(CompilationError):
         return table_from_data_flat(mismatches_sorted, column_names)
 
     def get_message(self) -> str:
+        if not self.yaml_columns:
+            return (
+                "This model has an enforced contract, and its 'columns' specification is missing"
+            )
+
         table: agate.Table = self.get_mismatches()
         # Hack to get Agate table output as string
         output = io.StringIO()
@@ -2419,7 +2380,7 @@ class RPCCompiling(DbtRuntimeError):
     CODE = 10010
     MESSAGE = 'RPC server is compiling the project, call the "status" method for' " compile status"
 
-    def __init__(self, msg: str = None, node=None):
+    def __init__(self, msg: Optional[str] = None, node=None):
         if msg is None:
             msg = "compile in progress"
         super().__init__(msg, node)

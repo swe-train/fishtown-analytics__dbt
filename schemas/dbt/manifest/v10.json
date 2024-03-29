@@ -10,8 +10,7 @@
     "metrics",
     "groups",
     "selectors",
-    "public_nodes",
-    "semantic_nodes"
+    "semantic_models"
   ],
   "properties": {
     "metadata": {
@@ -142,6 +141,9 @@
                 },
                 {
                   "$ref": "#/definitions/Metric"
+                },
+                {
+                  "$ref": "#/definitions/SemanticModel"
                 }
               ]
             }
@@ -204,14 +206,7 @@
       ],
       "description": "A mapping from group names to their nodes"
     },
-    "public_nodes": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/definitions/PublicModel"
-      },
-      "description": "The public models used in the dbt project"
-    },
-    "semantic_nodes": {
+    "semantic_models": {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/SemanticModel"
@@ -220,7 +215,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "WritableManifest(metadata: dbt.contracts.graph.manifest.ManifestMetadata, nodes: Mapping[str, Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode]], sources: Mapping[str, dbt.contracts.graph.nodes.SourceDefinition], macros: Mapping[str, dbt.contracts.graph.nodes.Macro], docs: Mapping[str, dbt.contracts.graph.nodes.Documentation], exposures: Mapping[str, dbt.contracts.graph.nodes.Exposure], metrics: Mapping[str, dbt.contracts.graph.nodes.Metric], groups: Mapping[str, dbt.contracts.graph.nodes.Group], selectors: Mapping[str, Any], disabled: Union[Mapping[str, List[Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode, dbt.contracts.graph.nodes.SourceDefinition, dbt.contracts.graph.nodes.Exposure, dbt.contracts.graph.nodes.Metric]]], NoneType], parent_map: Union[Dict[str, List[str]], NoneType], child_map: Union[Dict[str, List[str]], NoneType], group_map: Union[Dict[str, List[str]], NoneType], public_nodes: Mapping[str, dbt.contracts.publication.PublicModel], semantic_nodes: Mapping[str, dbt.contracts.graph.nodes.SemanticModel])",
+  "description": "WritableManifest(metadata: dbt.contracts.graph.manifest.ManifestMetadata, nodes: Mapping[str, Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode]], sources: Mapping[str, dbt.contracts.graph.nodes.SourceDefinition], macros: Mapping[str, dbt.contracts.graph.nodes.Macro], docs: Mapping[str, dbt.contracts.graph.nodes.Documentation], exposures: Mapping[str, dbt.contracts.graph.nodes.Exposure], metrics: Mapping[str, dbt.contracts.graph.nodes.Metric], groups: Mapping[str, dbt.contracts.graph.nodes.Group], selectors: Mapping[str, Any], disabled: Union[Mapping[str, List[Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode, dbt.contracts.graph.nodes.SourceDefinition, dbt.contracts.graph.nodes.Exposure, dbt.contracts.graph.nodes.Metric, dbt.contracts.graph.nodes.SemanticModel]]], NoneType], parent_map: Union[Dict[str, List[str]], NoneType], child_map: Union[Dict[str, List[str]], NoneType], group_map: Union[Dict[str, List[str]], NoneType], semantic_models: Mapping[str, dbt.contracts.graph.nodes.SemanticModel])",
   "definitions": {
     "ManifestMetadata": {
       "type": "object",
@@ -232,12 +227,12 @@
         },
         "dbt_version": {
           "type": "string",
-          "default": "1.6.0b2"
+          "default": "1.6.5"
         },
         "generated_at": {
           "type": "string",
           "format": "date-time",
-          "default": "2023-06-08T14:09:51.785131Z"
+          "default": "2023-10-05T00:33:14.410024Z"
         },
         "invocation_id": {
           "oneOf": [
@@ -248,7 +243,7 @@
               "type": "null"
             }
           ],
-          "default": "ff3ab26d-9f15-4c33-900a-16f30898f745"
+          "default": "603e2fae-9c7d-4d17-8530-7d28c9875263"
         },
         "env": {
           "type": "object",
@@ -479,7 +474,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.787065
+          "default": 1696465994.411958
         },
         "config_call_dict": {
           "type": "object",
@@ -534,8 +529,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -999,17 +993,10 @@
             "type": "string"
           },
           "default": []
-        },
-        "public_nodes": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": []
         }
       },
       "additionalProperties": false,
-      "description": "DependsOn(macros: List[str] = <factory>, nodes: List[str] = <factory>, public_nodes: List[str] = <factory>)"
+      "description": "DependsOn(macros: List[str] = <factory>, nodes: List[str] = <factory>)"
     },
     "InjectedCTE": {
       "type": "object",
@@ -1200,7 +1187,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.7883909
+          "default": 1696465994.413604
         },
         "config_call_dict": {
           "type": "object",
@@ -1255,8 +1242,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -1589,7 +1575,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.7890718
+          "default": 1696465994.414359
         },
         "config_call_dict": {
           "type": "object",
@@ -1644,8 +1630,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -1866,7 +1851,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.789758
+          "default": 1696465994.4150689
         },
         "config_call_dict": {
           "type": "object",
@@ -1921,8 +1906,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -1970,8 +1954,8 @@
         "access": {
           "type": "string",
           "enum": [
-            "protected",
             "private",
+            "protected",
             "public"
           ],
           "default": "protected"
@@ -2020,10 +2004,10 @@
             }
           ]
         },
-        "state_relation": {
+        "defer_relation": {
           "oneOf": [
             {
-              "$ref": "#/definitions/StateRelation"
+              "$ref": "#/definitions/DeferRelation"
             },
             {
               "type": "null"
@@ -2032,7 +2016,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "ModelNode(database: Union[str, NoneType], schema: str, name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], alias: str, checksum: dbt.contracts.files.FileHash, config: dbt.contracts.graph.model_config.NodeConfig = <factory>, _event_status: Dict[str, Any] = <factory>, tags: List[str] = <factory>, description: str = '', columns: Dict[str, dbt.contracts.graph.nodes.ColumnInfo] = <factory>, meta: Dict[str, Any] = <factory>, group: Union[str, NoneType] = None, docs: dbt.contracts.graph.unparsed.Docs = <factory>, patch_path: Union[str, NoneType] = None, build_path: Union[str, NoneType] = None, deferred: bool = False, unrendered_config: Dict[str, Any] = <factory>, created_at: float = <factory>, config_call_dict: Dict[str, Any] = <factory>, relation_name: Union[str, NoneType] = None, raw_code: str = '', language: str = 'sql', refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, sources: List[List[str]] = <factory>, metrics: List[List[str]] = <factory>, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, compiled_path: Union[str, NoneType] = None, compiled: bool = False, compiled_code: Union[str, NoneType] = None, extra_ctes_injected: bool = False, extra_ctes: List[dbt.contracts.graph.nodes.InjectedCTE] = <factory>, _pre_injected_sql: Union[str, NoneType] = None, contract: dbt.contracts.graph.nodes.Contract = <factory>, access: dbt.node_types.AccessType = <AccessType.Protected: 'protected'>, constraints: List[dbt.contracts.graph.nodes.ModelLevelConstraint] = <factory>, version: Union[str, float, NoneType] = None, latest_version: Union[str, float, NoneType] = None, deprecation_date: Union[datetime.datetime, NoneType] = None, state_relation: Union[dbt.contracts.graph.nodes.StateRelation, NoneType] = None)"
+      "description": "ModelNode(database: Union[str, NoneType], schema: str, name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], alias: str, checksum: dbt.contracts.files.FileHash, config: dbt.contracts.graph.model_config.NodeConfig = <factory>, _event_status: Dict[str, Any] = <factory>, tags: List[str] = <factory>, description: str = '', columns: Dict[str, dbt.contracts.graph.nodes.ColumnInfo] = <factory>, meta: Dict[str, Any] = <factory>, group: Union[str, NoneType] = None, docs: dbt.contracts.graph.unparsed.Docs = <factory>, patch_path: Union[str, NoneType] = None, build_path: Union[str, NoneType] = None, deferred: bool = False, unrendered_config: Dict[str, Any] = <factory>, created_at: float = <factory>, config_call_dict: Dict[str, Any] = <factory>, relation_name: Union[str, NoneType] = None, raw_code: str = '', language: str = 'sql', refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, sources: List[List[str]] = <factory>, metrics: List[List[str]] = <factory>, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, compiled_path: Union[str, NoneType] = None, compiled: bool = False, compiled_code: Union[str, NoneType] = None, extra_ctes_injected: bool = False, extra_ctes: List[dbt.contracts.graph.nodes.InjectedCTE] = <factory>, _pre_injected_sql: Union[str, NoneType] = None, contract: dbt.contracts.graph.nodes.Contract = <factory>, access: dbt.node_types.AccessType = <AccessType.Protected: 'protected'>, constraints: List[dbt.contracts.graph.nodes.ModelLevelConstraint] = <factory>, version: Union[str, float, NoneType] = None, latest_version: Union[str, float, NoneType] = None, deprecation_date: Union[datetime.datetime, NoneType] = None, defer_relation: Union[dbt.contracts.graph.nodes.DeferRelation, NoneType] = None)"
     },
     "ModelLevelConstraint": {
       "type": "object",
@@ -2090,16 +2074,13 @@
       "additionalProperties": false,
       "description": "ModelLevelConstraint(type: dbt.contracts.graph.nodes.ConstraintType, name: Union[str, NoneType] = None, expression: Union[str, NoneType] = None, warn_unenforced: bool = True, warn_unsupported: bool = True, columns: List[str] = <factory>)"
     },
-    "StateRelation": {
+    "DeferRelation": {
       "type": "object",
       "required": [
-        "alias",
-        "schema"
+        "schema",
+        "alias"
       ],
       "properties": {
-        "alias": {
-          "type": "string"
-        },
         "database": {
           "oneOf": [
             {
@@ -2112,10 +2093,23 @@
         },
         "schema": {
           "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "relation_name": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
-      "description": "StateRelation(alias: str, database: Union[str, NoneType], schema: str)"
+      "description": "DeferRelation(database: Union[str, NoneType], schema: str, alias: str, relation_name: Union[str, NoneType])"
     },
     "RPCNode": {
       "type": "object",
@@ -2279,7 +2273,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.790756
+          "default": 1696465994.416128
         },
         "config_call_dict": {
           "type": "object",
@@ -2334,8 +2328,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -2418,7 +2411,7 @@
         "resource_type": {
           "type": "string",
           "enum": [
-            "sql operation"
+            "sql_operation"
           ]
         },
         "package_name": {
@@ -2546,7 +2539,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.7913952
+          "default": 1696465994.41679
         },
         "config_call_dict": {
           "type": "object",
@@ -2601,8 +2594,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -2805,7 +2797,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.7921169
+          "default": 1696465994.4175282
         },
         "config_call_dict": {
           "type": "object",
@@ -2860,8 +2852,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -3101,7 +3092,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.79344
+          "default": 1696465994.418854
         },
         "config_call_dict": {
           "type": "object",
@@ -3156,8 +3147,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "compiled_path": {
@@ -3202,10 +3192,10 @@
             "checksum": null
           }
         },
-        "state_relation": {
+        "defer_relation": {
           "oneOf": [
             {
-              "$ref": "#/definitions/StateRelation"
+              "$ref": "#/definitions/DeferRelation"
             },
             {
               "type": "null"
@@ -3214,7 +3204,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "SnapshotNode(database: Union[str, NoneType], schema: str, name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], alias: str, checksum: dbt.contracts.files.FileHash, config: dbt.contracts.graph.model_config.SnapshotConfig, _event_status: Dict[str, Any] = <factory>, tags: List[str] = <factory>, description: str = '', columns: Dict[str, dbt.contracts.graph.nodes.ColumnInfo] = <factory>, meta: Dict[str, Any] = <factory>, group: Union[str, NoneType] = None, docs: dbt.contracts.graph.unparsed.Docs = <factory>, patch_path: Union[str, NoneType] = None, build_path: Union[str, NoneType] = None, deferred: bool = False, unrendered_config: Dict[str, Any] = <factory>, created_at: float = <factory>, config_call_dict: Dict[str, Any] = <factory>, relation_name: Union[str, NoneType] = None, raw_code: str = '', language: str = 'sql', refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, sources: List[List[str]] = <factory>, metrics: List[List[str]] = <factory>, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, compiled_path: Union[str, NoneType] = None, compiled: bool = False, compiled_code: Union[str, NoneType] = None, extra_ctes_injected: bool = False, extra_ctes: List[dbt.contracts.graph.nodes.InjectedCTE] = <factory>, _pre_injected_sql: Union[str, NoneType] = None, contract: dbt.contracts.graph.nodes.Contract = <factory>, state_relation: Union[dbt.contracts.graph.nodes.StateRelation, NoneType] = None)"
+      "description": "SnapshotNode(database: Union[str, NoneType], schema: str, name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], alias: str, checksum: dbt.contracts.files.FileHash, config: dbt.contracts.graph.model_config.SnapshotConfig, _event_status: Dict[str, Any] = <factory>, tags: List[str] = <factory>, description: str = '', columns: Dict[str, dbt.contracts.graph.nodes.ColumnInfo] = <factory>, meta: Dict[str, Any] = <factory>, group: Union[str, NoneType] = None, docs: dbt.contracts.graph.unparsed.Docs = <factory>, patch_path: Union[str, NoneType] = None, build_path: Union[str, NoneType] = None, deferred: bool = False, unrendered_config: Dict[str, Any] = <factory>, created_at: float = <factory>, config_call_dict: Dict[str, Any] = <factory>, relation_name: Union[str, NoneType] = None, raw_code: str = '', language: str = 'sql', refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, sources: List[List[str]] = <factory>, metrics: List[List[str]] = <factory>, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, compiled_path: Union[str, NoneType] = None, compiled: bool = False, compiled_code: Union[str, NoneType] = None, extra_ctes_injected: bool = False, extra_ctes: List[dbt.contracts.graph.nodes.InjectedCTE] = <factory>, _pre_injected_sql: Union[str, NoneType] = None, contract: dbt.contracts.graph.nodes.Contract = <factory>, defer_relation: Union[dbt.contracts.graph.nodes.DeferRelation, NoneType] = None)"
     },
     "SnapshotConfig": {
       "type": "object",
@@ -3609,7 +3599,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.794625
+          "default": 1696465994.420199
         },
         "config_call_dict": {
           "type": "object",
@@ -3645,10 +3635,10 @@
             "macros": []
           }
         },
-        "state_relation": {
+        "defer_relation": {
           "oneOf": [
             {
-              "$ref": "#/definitions/StateRelation"
+              "$ref": "#/definitions/DeferRelation"
             },
             {
               "type": "null"
@@ -3657,7 +3647,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "SeedNode(database: Union[str, NoneType], schema: str, name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], alias: str, checksum: dbt.contracts.files.FileHash, config: dbt.contracts.graph.model_config.SeedConfig = <factory>, _event_status: Dict[str, Any] = <factory>, tags: List[str] = <factory>, description: str = '', columns: Dict[str, dbt.contracts.graph.nodes.ColumnInfo] = <factory>, meta: Dict[str, Any] = <factory>, group: Union[str, NoneType] = None, docs: dbt.contracts.graph.unparsed.Docs = <factory>, patch_path: Union[str, NoneType] = None, build_path: Union[str, NoneType] = None, deferred: bool = False, unrendered_config: Dict[str, Any] = <factory>, created_at: float = <factory>, config_call_dict: Dict[str, Any] = <factory>, relation_name: Union[str, NoneType] = None, raw_code: str = '', root_path: Union[str, NoneType] = None, depends_on: dbt.contracts.graph.nodes.MacroDependsOn = <factory>, state_relation: Union[dbt.contracts.graph.nodes.StateRelation, NoneType] = None)"
+      "description": "SeedNode(database: Union[str, NoneType], schema: str, name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], alias: str, checksum: dbt.contracts.files.FileHash, config: dbt.contracts.graph.model_config.SeedConfig = <factory>, _event_status: Dict[str, Any] = <factory>, tags: List[str] = <factory>, description: str = '', columns: Dict[str, dbt.contracts.graph.nodes.ColumnInfo] = <factory>, meta: Dict[str, Any] = <factory>, group: Union[str, NoneType] = None, docs: dbt.contracts.graph.unparsed.Docs = <factory>, patch_path: Union[str, NoneType] = None, build_path: Union[str, NoneType] = None, deferred: bool = False, unrendered_config: Dict[str, Any] = <factory>, created_at: float = <factory>, config_call_dict: Dict[str, Any] = <factory>, relation_name: Union[str, NoneType] = None, raw_code: str = '', root_path: Union[str, NoneType] = None, depends_on: dbt.contracts.graph.nodes.MacroDependsOn = <factory>, defer_relation: Union[dbt.contracts.graph.nodes.DeferRelation, NoneType] = None)"
     },
     "SeedConfig": {
       "type": "object",
@@ -4030,7 +4020,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.7958772
+          "default": 1696465994.421661
         }
       },
       "additionalProperties": false,
@@ -4342,7 +4332,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.796146
+          "default": 1696465994.421958
         },
         "supported_languages": {
           "oneOf": [
@@ -4550,8 +4540,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "refs": {
@@ -4583,7 +4572,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.796803
+          "default": 1696465994.422623
         }
       },
       "additionalProperties": false,
@@ -4683,7 +4672,6 @@
           "enum": [
             "simple",
             "ratio",
-            "expr",
             "cumulative",
             "derived"
           ]
@@ -4704,7 +4692,7 @@
         "metadata": {
           "oneOf": [
             {
-              "$ref": "#/definitions/Metadata"
+              "$ref": "#/definitions/SourceFileMetadata"
             },
             {
               "type": "null"
@@ -4747,8 +4735,7 @@
           "$ref": "#/definitions/DependsOn",
           "default": {
             "macros": [],
-            "nodes": [],
-            "public_nodes": []
+            "nodes": []
           }
         },
         "refs": {
@@ -4770,7 +4757,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1686233391.797935
+          "default": 1696465994.4238322
         },
         "group": {
           "oneOf": [
@@ -4784,7 +4771,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Metric(name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], description: str, label: str, type: dbt_semantic_interfaces.type_enums.metric_type.MetricType, type_params: dbt.contracts.graph.nodes.MetricTypeParams, filter: Union[dbt.contracts.graph.nodes.WhereFilter, NoneType] = None, metadata: Union[dbt.contracts.graph.nodes.Metadata, NoneType] = None, meta: Dict[str, Any] = <factory>, tags: List[str] = <factory>, config: dbt.contracts.graph.model_config.MetricConfig = <factory>, unrendered_config: Dict[str, Any] = <factory>, sources: List[List[str]] = <factory>, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, metrics: List[List[str]] = <factory>, created_at: float = <factory>, group: Union[str, NoneType] = None)"
+      "description": "Metric(name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], description: str, label: str, type: dbt_semantic_interfaces.type_enums.metric_type.MetricType, type_params: dbt.contracts.graph.nodes.MetricTypeParams, filter: Union[dbt.contracts.graph.nodes.WhereFilter, NoneType] = None, metadata: Union[dbt.contracts.graph.semantic_models.SourceFileMetadata, NoneType] = None, meta: Dict[str, Any] = <factory>, tags: List[str] = <factory>, config: dbt.contracts.graph.model_config.MetricConfig = <factory>, unrendered_config: Dict[str, Any] = <factory>, sources: List[List[str]] = <factory>, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, metrics: List[List[str]] = <factory>, created_at: float = <factory>, group: Union[str, NoneType] = None)"
     },
     "MetricTypeParams": {
       "type": "object",
@@ -4800,23 +4787,17 @@
             }
           ]
         },
-        "measures": {
-          "oneOf": [
-            {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/MetricInputMeasure"
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "input_measures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MetricInputMeasure"
+          },
+          "default": []
         },
         "numerator": {
           "oneOf": [
             {
-              "$ref": "#/definitions/MetricInputMeasure"
+              "$ref": "#/definitions/MetricInput"
             },
             {
               "type": "null"
@@ -4826,7 +4807,7 @@
         "denominator": {
           "oneOf": [
             {
-              "$ref": "#/definitions/MetricInputMeasure"
+              "$ref": "#/definitions/MetricInput"
             },
             {
               "type": "null"
@@ -4885,7 +4866,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "MetricTypeParams(measure: Union[dbt.contracts.graph.nodes.MetricInputMeasure, NoneType] = None, measures: Union[List[dbt.contracts.graph.nodes.MetricInputMeasure], NoneType] = None, numerator: Union[dbt.contracts.graph.nodes.MetricInputMeasure, NoneType] = None, denominator: Union[dbt.contracts.graph.nodes.MetricInputMeasure, NoneType] = None, expr: Union[str, NoneType] = None, window: Union[dbt.contracts.graph.nodes.MetricTimeWindow, NoneType] = None, grain_to_date: Union[dbt_semantic_interfaces.type_enums.time_granularity.TimeGranularity, NoneType] = None, metrics: Union[List[dbt.contracts.graph.nodes.MetricInput], NoneType] = None)"
+      "description": "MetricTypeParams(measure: Union[dbt.contracts.graph.nodes.MetricInputMeasure, NoneType] = None, input_measures: List[dbt.contracts.graph.nodes.MetricInputMeasure] = <factory>, numerator: Union[dbt.contracts.graph.nodes.MetricInput, NoneType] = None, denominator: Union[dbt.contracts.graph.nodes.MetricInput, NoneType] = None, expr: Union[str, NoneType] = None, window: Union[dbt.contracts.graph.nodes.MetricTimeWindow, NoneType] = None, grain_to_date: Union[dbt_semantic_interfaces.type_enums.time_granularity.TimeGranularity, NoneType] = None, metrics: Union[List[dbt.contracts.graph.nodes.MetricInput], NoneType] = None)"
     },
     "MetricInputMeasure": {
       "type": "object",
@@ -4915,10 +4896,24 @@
               "type": "null"
             }
           ]
+        },
+        "join_to_timespine": {
+          "type": "boolean",
+          "default": false
+        },
+        "fill_nulls_with": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
-      "description": "MetricInputMeasure(name: str, filter: Union[dbt.contracts.graph.nodes.WhereFilter, NoneType] = None, alias: Union[str, NoneType] = None)"
+      "description": "MetricInputMeasure(name: str, filter: Union[dbt.contracts.graph.nodes.WhereFilter, NoneType] = None, alias: Union[str, NoneType] = None, join_to_timespine: bool = False, fill_nulls_with: Union[int, NoneType] = None)"
     },
     "WhereFilter": {
       "type": "object",
@@ -4932,30 +4927,6 @@
       },
       "additionalProperties": false,
       "description": "WhereFilter(where_sql_template: str)"
-    },
-    "MetricTimeWindow": {
-      "type": "object",
-      "required": [
-        "count",
-        "granularity"
-      ],
-      "properties": {
-        "count": {
-          "type": "integer"
-        },
-        "granularity": {
-          "type": "string",
-          "enum": [
-            "day",
-            "week",
-            "month",
-            "quarter",
-            "year"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "description": "MetricTimeWindow(count: int, granularity: dbt_semantic_interfaces.type_enums.time_granularity.TimeGranularity)"
     },
     "MetricInput": {
       "type": "object",
@@ -5017,7 +4988,31 @@
       "additionalProperties": false,
       "description": "MetricInput(name: str, filter: Union[dbt.contracts.graph.nodes.WhereFilter, NoneType] = None, alias: Union[str, NoneType] = None, offset_window: Union[dbt.contracts.graph.nodes.MetricTimeWindow, NoneType] = None, offset_to_grain: Union[dbt_semantic_interfaces.type_enums.time_granularity.TimeGranularity, NoneType] = None)"
     },
-    "Metadata": {
+    "MetricTimeWindow": {
+      "type": "object",
+      "required": [
+        "count",
+        "granularity"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "granularity": {
+          "type": "string",
+          "enum": [
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "MetricTimeWindow(count: int, granularity: dbt_semantic_interfaces.type_enums.time_granularity.TimeGranularity)"
+    },
+    "SourceFileMetadata": {
       "type": "object",
       "required": [
         "repo_file_path",
@@ -5121,110 +5116,6 @@
       "additionalProperties": false,
       "description": "Group(name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, owner: dbt.contracts.graph.unparsed.Owner)"
     },
-    "PublicModel": {
-      "type": "object",
-      "required": [
-        "name",
-        "package_name",
-        "unique_id",
-        "relation_name"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "package_name": {
-          "type": "string"
-        },
-        "unique_id": {
-          "type": "string"
-        },
-        "relation_name": {
-          "type": "string"
-        },
-        "database": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "schema": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "identifier": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "version": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "latest_version": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "public_node_dependencies": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": []
-        },
-        "generated_at": {
-          "type": "string",
-          "format": "date-time",
-          "default": "2023-06-08T14:09:51.798685Z"
-        },
-        "deprecation_date": {
-          "oneOf": [
-            {
-              "type": "string",
-              "format": "date-time"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "description": "Used to represent cross-project models"
-    },
     "SemanticModel": {
       "type": "object",
       "required": [
@@ -5235,10 +5126,7 @@
         "original_file_path",
         "unique_id",
         "fqn",
-        "model",
-        "entities",
-        "measures",
-        "dimensions"
+        "model"
       ],
       "properties": {
         "name": {
@@ -5254,14 +5142,14 @@
             "operation",
             "seed",
             "rpc",
-            "sql operation",
+            "sql_operation",
             "doc",
             "source",
             "macro",
             "exposure",
             "metric",
             "group",
-            "semantic model"
+            "semantic_model"
           ]
         },
         "package_name": {
@@ -5282,16 +5170,6 @@
             "type": "string"
           }
         },
-        "description": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "model": {
           "type": "string"
         },
@@ -5305,27 +5183,104 @@
             }
           ]
         },
+        "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "defaults": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Defaults"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "entities": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Entity"
-          }
+          },
+          "default": []
         },
         "measures": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Measure"
-          }
+          },
+          "default": []
         },
         "dimensions": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Dimension"
+          },
+          "default": []
+        },
+        "metadata": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/SourceFileMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depends_on": {
+          "$ref": "#/definitions/DependsOn",
+          "default": {
+            "macros": [],
+            "nodes": []
           }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RefArgs"
+          },
+          "default": []
+        },
+        "created_at": {
+          "type": "number",
+          "default": 1696465994.425479
+        },
+        "config": {
+          "$ref": "#/definitions/SemanticModelConfig",
+          "default": {
+            "enabled": true
+          }
+        },
+        "primary_entity": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
-      "description": "SemanticModel(name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], description: Union[str, NoneType], model: str, node_relation: Union[dbt.contracts.graph.nodes.NodeRelation, NoneType], entities: Sequence[dbt.contracts.graph.unparsed.Entity], measures: Sequence[dbt.contracts.graph.unparsed.Measure], dimensions: Sequence[dbt.contracts.graph.unparsed.Dimension])"
+      "description": "SemanticModel(name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], model: str, node_relation: Union[dbt.contracts.graph.nodes.NodeRelation, NoneType], description: Union[str, NoneType] = None, label: Union[str, NoneType] = None, defaults: Union[dbt.contracts.graph.semantic_models.Defaults, NoneType] = None, entities: Sequence[dbt.contracts.graph.semantic_models.Entity] = <factory>, measures: Sequence[dbt.contracts.graph.semantic_models.Measure] = <factory>, dimensions: Sequence[dbt.contracts.graph.semantic_models.Dimension] = <factory>, metadata: Union[dbt.contracts.graph.semantic_models.SourceFileMetadata, NoneType] = None, depends_on: dbt.contracts.graph.nodes.DependsOn = <factory>, refs: List[dbt.contracts.graph.nodes.RefArgs] = <factory>, created_at: float = <factory>, config: dbt.contracts.graph.model_config.SemanticModelConfig = <factory>, primary_entity: Union[str, NoneType] = None)"
     },
     "NodeRelation": {
       "type": "object",
@@ -5349,10 +5304,38 @@
               "type": "null"
             }
           ]
+        },
+        "relation_name": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
-      "description": "NodeRelation(alias: str, schema_name: str, database: Union[str, NoneType] = None)"
+      "description": "NodeRelation(alias: str, schema_name: str, database: Union[str, NoneType] = None, relation_name: Union[str, NoneType] = None)"
+    },
+    "Defaults": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "agg_time_dimension": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Defaults(agg_time_dimension: Union[str, NoneType] = None)"
     },
     "Entity": {
       "type": "object",
@@ -5365,9 +5348,25 @@
           "type": "string"
         },
         "type": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "foreign",
+            "natural",
+            "primary",
+            "unique"
+          ]
         },
         "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
           "oneOf": [
             {
               "type": "string"
@@ -5399,7 +5398,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Entity(name: str, type: str, description: Union[str, NoneType] = None, role: Union[str, NoneType] = None, expr: Union[str, NoneType] = None)"
+      "description": "Entity(name: str, type: dbt_semantic_interfaces.type_enums.entity_type.EntityType, description: Union[str, NoneType] = None, label: Union[str, NoneType] = None, role: Union[str, NoneType] = None, expr: Union[str, NoneType] = None)"
     },
     "Measure": {
       "type": "object",
@@ -5412,7 +5411,18 @@
           "type": "string"
         },
         "agg": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "sum",
+            "min",
+            "max",
+            "count_distinct",
+            "sum_boolean",
+            "average",
+            "percentile",
+            "median",
+            "count"
+          ]
         },
         "description": {
           "oneOf": [
@@ -5424,15 +5434,19 @@
             }
           ]
         },
-        "create_metric": {
+        "label": {
           "oneOf": [
             {
-              "type": "boolean"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ]
+        },
+        "create_metric": {
+          "type": "boolean",
+          "default": false
         },
         "expr": {
           "oneOf": [
@@ -5457,7 +5471,7 @@
         "non_additive_dimension": {
           "oneOf": [
             {
-              "type": "object"
+              "$ref": "#/definitions/NonAdditiveDimension"
             },
             {
               "type": "null"
@@ -5476,7 +5490,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Measure(name: str, agg: str, description: Union[str, NoneType] = None, create_metric: Union[bool, NoneType] = None, expr: Union[str, NoneType] = None, agg_params: Union[dbt.contracts.graph.unparsed.MeasureAggregationParameters, NoneType] = None, non_additive_dimension: Union[Dict[str, Any], NoneType] = None, agg_time_dimension: Union[str, NoneType] = None)"
+      "description": "Measure(name: str, agg: dbt_semantic_interfaces.type_enums.aggregation_type.AggregationType, description: Union[str, NoneType] = None, label: Union[str, NoneType] = None, create_metric: bool = False, expr: Union[str, NoneType] = None, agg_params: Union[dbt.contracts.graph.semantic_models.MeasureAggregationParameters, NoneType] = None, non_additive_dimension: Union[dbt.contracts.graph.semantic_models.NonAdditiveDimension, NoneType] = None, agg_time_dimension: Union[str, NoneType] = None)"
     },
     "MeasureAggregationParameters": {
       "type": "object",
@@ -5504,6 +5518,41 @@
       "additionalProperties": false,
       "description": "MeasureAggregationParameters(percentile: Union[float, NoneType] = None, use_discrete_percentile: bool = False, use_approximate_percentile: bool = False)"
     },
+    "NonAdditiveDimension": {
+      "type": "object",
+      "required": [
+        "name",
+        "window_choice",
+        "window_groupings"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "window_choice": {
+          "type": "string",
+          "enum": [
+            "sum",
+            "min",
+            "max",
+            "count_distinct",
+            "sum_boolean",
+            "average",
+            "percentile",
+            "median",
+            "count"
+          ]
+        },
+        "window_groupings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "NonAdditiveDimension(name: str, window_choice: dbt_semantic_interfaces.type_enums.aggregation_type.AggregationType, window_groupings: List[str])"
+    },
     "Dimension": {
       "type": "object",
       "required": [
@@ -5515,7 +5564,11 @@
           "type": "string"
         },
         "type": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "categorical",
+            "time"
+          ]
         },
         "description": {
           "oneOf": [
@@ -5527,21 +5580,24 @@
             }
           ]
         },
-        "is_partition": {
+        "label": {
           "oneOf": [
             {
-              "type": "boolean"
+              "type": "string"
             },
             {
               "type": "null"
             }
-          ],
+          ]
+        },
+        "is_partition": {
+          "type": "boolean",
           "default": false
         },
         "type_params": {
           "oneOf": [
             {
-              "type": "object"
+              "$ref": "#/definitions/DimensionTypeParams"
             },
             {
               "type": "null"
@@ -5557,10 +5613,78 @@
               "type": "null"
             }
           ]
+        },
+        "metadata": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/SourceFileMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
-      "description": "Dimension(name: str, type: str, description: Union[str, NoneType] = None, is_partition: Union[bool, NoneType] = False, type_params: Union[Dict[str, Any], NoneType] = None, expr: Union[str, NoneType] = None)"
+      "description": "Dimension(name: str, type: dbt_semantic_interfaces.type_enums.dimension_type.DimensionType, description: Union[str, NoneType] = None, label: Union[str, NoneType] = None, is_partition: bool = False, type_params: Union[dbt.contracts.graph.semantic_models.DimensionTypeParams, NoneType] = None, expr: Union[str, NoneType] = None, metadata: Union[dbt.contracts.graph.semantic_models.SourceFileMetadata, NoneType] = None)"
+    },
+    "DimensionTypeParams": {
+      "type": "object",
+      "required": [
+        "time_granularity"
+      ],
+      "properties": {
+        "time_granularity": {
+          "type": "string",
+          "enum": [
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ]
+        },
+        "validity_params": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/DimensionValidityParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "DimensionTypeParams(time_granularity: dbt_semantic_interfaces.type_enums.time_granularity.TimeGranularity, validity_params: Union[dbt.contracts.graph.semantic_models.DimensionValidityParams, NoneType] = None)"
+    },
+    "DimensionValidityParams": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "is_start": {
+          "type": "boolean",
+          "default": false
+        },
+        "is_end": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "DimensionValidityParams(is_start: bool = False, is_end: bool = False)"
+    },
+    "SemanticModelConfig": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": true,
+      "description": "SemanticModelConfig(_extra: Dict[str, Any] = <factory>, enabled: bool = True)"
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",

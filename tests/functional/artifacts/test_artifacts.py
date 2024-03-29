@@ -468,8 +468,8 @@ def verify_manifest(project, expected_manifest, start_time, manifest_schema_path
         "disabled",
         "exposures",
         "selectors",
-        "public_nodes",
-        "semantic_nodes",
+        "semantic_models",
+        "saved_queries",
     }
 
     assert set(manifest.keys()) == manifest_keys
@@ -495,7 +495,7 @@ def verify_manifest(project, expected_manifest, start_time, manifest_schema_path
             for unique_id, node in expected_manifest[key].items():
                 assert unique_id in manifest[key]
                 assert manifest[key][unique_id] == node, f"{unique_id} did not match"
-        else:  # ['docs', 'parent_map', 'child_map', 'group_map', 'selectors']
+        else:  # ['docs', 'parent_map', 'child_map', 'group_map', 'selectors', 'semantic_models', 'saved_queries']
             assert manifest[key] == expected_manifest[key]
 
 
@@ -690,7 +690,7 @@ class TestVerifyRunOperation(BaseVerifyProject):
         results, log_output = run_dbt_and_capture(["run-operation", "alter_timezone"])
         assert len(results) == 1
         assert results[0].status == RunStatus.Success
-        assert results[0].unique_id == "operation.test.alter_timezone"
+        assert results[0].unique_id == "macro.test.alter_timezone"
         assert "Timezone set to: America/Los_Angeles" in log_output
 
     def test_run_model_with_operation(self, project):

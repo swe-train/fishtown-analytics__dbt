@@ -3,6 +3,11 @@ import re
 
 from dbt import deprecations
 from dbt.node_types import NodeType
+from dbt.contracts.graph.semantic_models import (
+    Defaults,
+    DimensionValidityParams,
+    MeasureAggregationParameters,
+)
 from dbt.contracts.util import (
     AdditionalPropertiesMixin,
     Mergeable,
@@ -14,11 +19,12 @@ import dbt.helper_types  # noqa:F401
 from dbt.exceptions import CompilationError, ParsingError, DbtInternalError
 
 from dbt.dataclass_schema import dbtClassMixin, StrEnum, ExtensibleDbtClassMixin, ValidationError
+from dbt_semantic_interfaces.type_enums import ConversionCalculationType
 
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional, List, Union, Dict, Any, Sequence
+from typing import Optional, List, Union, Dict, Any, Sequence, Literal
 
 
 @dataclass
@@ -44,31 +50,18 @@ class HasCode(dbtClassMixin):
 
 @dataclass
 class UnparsedMacro(UnparsedBaseNode, HasCode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Macro]})
+    resource_type: Literal[NodeType.Macro]
 
 
 @dataclass
 class UnparsedGenericTest(UnparsedBaseNode, HasCode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Macro]})
+    resource_type: Literal[NodeType.Macro]
 
 
 @dataclass
 class UnparsedNode(UnparsedBaseNode, HasCode):
     name: str
-    resource_type: NodeType = field(
-        metadata={
-            "restrict": [
-                NodeType.Model,
-                NodeType.Analysis,
-                NodeType.Test,
-                NodeType.Snapshot,
-                NodeType.Operation,
-                NodeType.Seed,
-                NodeType.RPCCall,
-                NodeType.SqlOperation,
-            ]
-        }
-    )
+    resource_type: NodeType
 
     @property
     def search_name(self):
@@ -77,7 +70,7 @@ class UnparsedNode(UnparsedBaseNode, HasCode):
 
 @dataclass
 class UnparsedRunHook(UnparsedNode):
-    resource_type: NodeType = field(metadata={"restrict": [NodeType.Operation]})
+    resource_type: Literal[NodeType.Operation]
     index: Optional[int] = None
 
 
@@ -158,14 +151,9 @@ class UnparsedVersion(dbtClassMixin):
 
     def __lt__(self, other):
         try:
-            v = type(other.v)(self.v)
-            return v < other.v
+            return float(self.v) < float(other.v)
         except ValueError:
-            try:
-                other_v = type(self.v)(other.v)
-                return self.v < other_v
-            except ValueError:
-                return str(self.v) < str(other.v)
+            return str(self.v) < str(other.v)
 
     @property
     def include_exclude(self) -> dbt.helper_types.IncludeExclude:
@@ -215,7 +203,7 @@ class UnparsedModelUpdate(UnparsedNodeUpdate):
     versions: Sequence[UnparsedVersion] = field(default_factory=list)
     deprecation_date: Optional[datetime.datetime] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.latest_version:
             version_values = [version.v for version in self.versions]
             if self.latest_version not in version_values:
@@ -223,7 +211,7 @@ class UnparsedModelUpdate(UnparsedNodeUpdate):
                     f"latest_version: {self.latest_version} is not one of model '{self.name}' versions: {version_values} "
                 )
 
-        seen_versions: set[str] = set()
+        seen_versions = set()
         for version in self.versions:
             if str(version.v) in seen_versions:
                 raise ParsingError(
@@ -595,29 +583,49 @@ class MetricTime(dbtClassMixin, Mergeable):
 @dataclass
 class UnparsedMetricInputMeasure(dbtClassMixin):
     name: str
-    filter: Optional[str] = None
+    filter: Optional[Union[str, List[str]]] = None
     alias: Optional[str] = None
+    join_to_timespine: bool = False
+    fill_nulls_with: Optional[int] = None
 
 
 @dataclass
 class UnparsedMetricInput(dbtClassMixin):
     name: str
-    filter: Optional[str] = None
+    filter: Optional[Union[str, List[str]]] = None
     alias: Optional[str] = None
     offset_window: Optional[str] = None
     offset_to_grain: Optional[str] = None  # str is really a TimeGranularity Enum
 
 
 @dataclass
+class ConstantPropertyInput(dbtClassMixin):
+    base_property: str
+    conversion_property: str
+
+
+@dataclass
+class UnparsedConversionTypeParams(dbtClassMixin):
+    base_measure: Union[UnparsedMetricInputMeasure, str]
+    conversion_measure: Union[UnparsedMetricInputMeasure, str]
+    entity: str
+    calculation: str = (
+        ConversionCalculationType.CONVERSION_RATE.value
+    )  # ConversionCalculationType Enum
+    window: Optional[str] = None
+    constant_properties: Optional[List[ConstantPropertyInput]] = None
+
+
+@dataclass
 class UnparsedMetricTypeParams(dbtClassMixin):
     measure: Optional[Union[UnparsedMetricInputMeasure, str]] = None
-    measures: Optional[List[Union[UnparsedMetricInputMeasure, str]]] = None
-    numerator: Optional[Union[UnparsedMetricInputMeasure, str]] = None
-    denominator: Optional[Union[UnparsedMetricInputMeasure, str]] = None
-    expr: Optional[str] = None
+    numerator: Optional[Union[UnparsedMetricInput, str]] = None
+    denominator: Optional[Union[UnparsedMetricInput, str]] = None
+    expr: Optional[Union[str, bool]] = None
     window: Optional[str] = None
     grain_to_date: Optional[str] = None  # str is really a TimeGranularity Enum
     metrics: Optional[List[Union[UnparsedMetricInput, str]]] = None
+    conversion_type_params: Optional[UnparsedConversionTypeParams] = None
 
 
 @dataclass
@@ -627,7 +635,7 @@ class UnparsedMetric(dbtClassMixin):
     type: str
     type_params: UnparsedMetricTypeParams
     description: str = ""
-    filter: Optional[str] = None
+    filter: Optional[Union[str, List[str]]] = None
     # metadata: Optional[Unparsedetadata] = None # TODO
     meta: Dict[str, Any] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
@@ -673,52 +681,89 @@ class UnparsedGroup(dbtClassMixin, Replaceable):
 
 
 @dataclass
-class Entity(dbtClassMixin):
+class UnparsedEntity(dbtClassMixin):
     name: str
-    type: str  # actually an enum
+    type: str  # EntityType enum
     description: Optional[str] = None
+    label: Optional[str] = None
     role: Optional[str] = None
     expr: Optional[str] = None
 
 
 @dataclass
-class MeasureAggregationParameters(dbtClassMixin):
-    percentile: Optional[float] = None
-    use_discrete_percentile: bool = False
-    use_approximate_percentile: bool = False
+class UnparsedNonAdditiveDimension(dbtClassMixin):
+    name: str
+    window_choice: str  # AggregationType enum
+    window_groupings: List[str] = field(default_factory=list)
 
 
 @dataclass
-class Measure(dbtClassMixin):
+class UnparsedMeasure(dbtClassMixin):
     name: str
     agg: str  # actually an enum
     description: Optional[str] = None
-    create_metric: Optional[bool] = None
-    expr: Optional[str] = None
+    label: Optional[str] = None
+    expr: Optional[Union[str, bool, int]] = None
     agg_params: Optional[MeasureAggregationParameters] = None
-    non_additive_dimension: Optional[Dict[str, Any]] = None
+    non_additive_dimension: Optional[UnparsedNonAdditiveDimension] = None
     agg_time_dimension: Optional[str] = None
+    create_metric: bool = False
 
 
 @dataclass
-class Dimension(dbtClassMixin):
+class UnparsedDimensionTypeParams(dbtClassMixin):
+    time_granularity: str  # TimeGranularity enum
+    validity_params: Optional[DimensionValidityParams] = None
+
+
+@dataclass
+class UnparsedDimension(dbtClassMixin):
     name: str
     type: str  # actually an enum
     description: Optional[str] = None
-    is_partition: Optional[bool] = False
-    type_params: Optional[Dict[str, Any]] = None
+    label: Optional[str] = None
+    is_partition: bool = False
+    type_params: Optional[UnparsedDimensionTypeParams] = None
     expr: Optional[str] = None
-    # TODO metadata: Optional[Metadata] (this would actually be the YML for the dimension)
 
 
 @dataclass
 class UnparsedSemanticModel(dbtClassMixin):
     name: str
-    description: Optional[str]
     model: str  # looks like "ref(...)"
-    entities: List[Entity] = field(default_factory=list)
-    measures: List[Measure] = field(default_factory=list)
-    dimensions: List[Dimension] = field(default_factory=list)
+    config: Dict[str, Any] = field(default_factory=dict)
+    description: Optional[str] = None
+    label: Optional[str] = None
+    defaults: Optional[Defaults] = None
+    entities: List[UnparsedEntity] = field(default_factory=list)
+    measures: List[UnparsedMeasure] = field(default_factory=list)
+    dimensions: List[UnparsedDimension] = field(default_factory=list)
+    primary_entity: Optional[str] = None
+
+
+@dataclass
+class UnparsedQueryParams(dbtClassMixin):
+    metrics: List[str] = field(default_factory=list)
+    group_by: List[str] = field(default_factory=list)
+    where: Optional[Union[str, List[str]]] = None
+
+
+@dataclass
+class UnparsedExport(dbtClassMixin):
+    """Configuration for writing query results to a table."""
+
+    name: str
+    config: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UnparsedSavedQuery(dbtClassMixin):
+    name: str
+    query_params: UnparsedQueryParams
+    description: Optional[str] = None
+    label: Optional[str] = None
+    exports: List[UnparsedExport] = field(default_factory=list)
+    config: Dict[str, Any] = field(default_factory=dict)
 
 
 def normalize_date(d: Optional[datetime.date]) -> Optional[datetime.datetime]:

@@ -24,6 +24,7 @@ if os.name != "nt":
 FLAGS_DEFAULTS = {
     "INDIRECT_SELECTION": "eager",
     "TARGET_PATH": None,
+    "WARN_ERROR": None,
     # Cli args without user_config or env var option.
     "FULL_REFRESH": False,
     "STRICT_MODE": False,
@@ -57,11 +58,10 @@ def args_to_context(args: List[str]) -> Context:
     from dbt.cli.main import cli
 
     cli_ctx = cli.make_context(cli.name, args)
-    # Split args if they're a comma seperated string.
+    # Split args if they're a comma separated string.
     if len(args) == 1 and "," in args[0]:
         args = args[0].split(",")
     sub_command_name, sub_command, args = cli.resolve_command(cli_ctx, args)
-
     # Handle source and docs group.
     if isinstance(sub_command, Group):
         sub_command_name, sub_command, args = sub_command.resolve_command(cli_ctx, args)
@@ -76,8 +76,9 @@ def args_to_context(args: List[str]) -> Context:
 class Flags:
     """Primary configuration artifact for running dbt"""
 
-    def __init__(self, ctx: Context = None, user_config: UserConfig = None) -> None:
-
+    def __init__(
+        self, ctx: Optional[Context] = None, user_config: Optional[UserConfig] = None
+    ) -> None:
         # Set the default flags.
         for key, value in FLAGS_DEFAULTS.items():
             object.__setattr__(self, key, value)
@@ -119,7 +120,6 @@ class Flags:
                 # respected over DBT_PRINT or --print.
                 new_name: Union[str, None] = None
                 if param_name in DEPRECATED_PARAMS:
-
                     # Deprecated env vars can only be set via env var.
                     # We use the deprecated option in click to serialize the value
                     # from the env var string.
@@ -203,6 +203,9 @@ class Flags:
         if not user_config:
             profiles_dir = getattr(self, "PROFILES_DIR", None)
             user_config = read_user_config(profiles_dir) if profiles_dir else None
+
+        # Add entire invocation command to flags
+        object.__setattr__(self, "INVOCATION_COMMAND", "dbt " + " ".join(sys.argv[1:]))
 
         # Overwrite default assignments with user config if available.
         if user_config:
@@ -311,10 +314,8 @@ def command_params(command: CliCommand, args_dict: Dict[str, Any]) -> CommandPar
     default_args = set([x.lower() for x in FLAGS_DEFAULTS.keys()])
 
     res = command.to_list()
-
     for k, v in args_dict.items():
         k = k.lower()
-
         # if a "which" value exists in the args dict, it should match the command provided
         if k == WHICH_KEY:
             if v != command.value:
@@ -324,7 +325,9 @@ def command_params(command: CliCommand, args_dict: Dict[str, Any]) -> CommandPar
             continue
 
         # param was assigned from defaults and should not be included
-        if k not in (cmd_args | prnt_args) - default_args:
+        if k not in (cmd_args | prnt_args) or (
+            k in default_args and v == FLAGS_DEFAULTS[k.upper()]
+        ):
             continue
 
         # if the param is in parent args, it should come before the arg name
@@ -337,9 +340,14 @@ def command_params(command: CliCommand, args_dict: Dict[str, Any]) -> CommandPar
 
         spinal_cased = k.replace("_", "-")
 
+        # MultiOption flags come back as lists, but we want to pass them as space separated strings
+        if isinstance(v, list):
+            v = " ".join(v)
+
         if k == "macro" and command == CliCommand.RUN_OPERATION:
             add_fn(v)
-        elif v in (None, False):
+        # None is a Singleton, False is a Flyweight, only one instance of each.
+        elif v is None or v is False:
             add_fn(f"--no-{spinal_cased}")
         elif v is True:
             add_fn(f"--{spinal_cased}")
@@ -371,6 +379,7 @@ def command_args(command: CliCommand) -> ArgsList:
     CMD_DICT: Dict[CliCommand, ClickCommand] = {
         CliCommand.BUILD: cli.build,
         CliCommand.CLEAN: cli.clean,
+        CliCommand.CLONE: cli.clone,
         CliCommand.COMPILE: cli.compile,
         CliCommand.DOCS_GENERATE: cli.docs_generate,
         CliCommand.DOCS_SERVE: cli.docs_serve,
