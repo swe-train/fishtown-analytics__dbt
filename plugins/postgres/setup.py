@@ -19,27 +19,6 @@ except ImportError:
     sys.exit(1)
 
 
-PSYCOPG2_MESSAGE = """
-No package name override was set.
-Using 'psycopg2-binary' package to satisfy 'psycopg2'
-
-If you experience segmentation faults, silent crashes, or installation errors,
-consider retrying with the 'DBT_PSYCOPG2_NAME' environment variable set to
-'psycopg2'. It may require a compiler toolchain and development libraries!
-""".strip()
-
-
-def _dbt_psycopg2_name():
-    # if the user chose something, use that
-    package_name = os.getenv("DBT_PSYCOPG2_NAME", "")
-    if package_name:
-        return package_name
-
-    # default to psycopg2-binary for all OSes/versions
-    print(PSYCOPG2_MESSAGE)
-    return "psycopg2-binary"
-
-
 package_name = "dbt-postgres"
 package_version = "1.7.11"
 description = """The postgres adapter plugin for dbt (data build tool)"""
@@ -48,7 +27,6 @@ this_directory = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(this_directory, "README.md")) as f:
     long_description = f.read()
 
-DBT_PSYCOPG2_NAME = _dbt_psycopg2_name()
 
 setup(
     name=package_name,
@@ -63,7 +41,8 @@ setup(
     include_package_data=True,
     install_requires=[
         "dbt-core=={}".format(package_version),
-        "{}~=2.8".format(DBT_PSYCOPG2_NAME),
+        'psycopg2~=2.8; platform_system == "Linux"',
+        'psycopg2-binary~=2.8; platform_system != "Linux"',
         # installed via dbt-core, but referenced directly, don't pin to avoid version conflicts with dbt-core
         "agate",
     ],
