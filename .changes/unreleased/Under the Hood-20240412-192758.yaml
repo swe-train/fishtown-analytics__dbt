@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: Update `psycopg2` version to be driven off of host platform instead of an envrionment
+  variable
+time: 2024-04-12T19:27:58.633196-04:00
+custom:
+  Author: mikealfare
+  Issue: "50"
