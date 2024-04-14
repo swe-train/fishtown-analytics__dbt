@@ -45,6 +45,7 @@ class UnitTestDiff(dbtClassMixin):
     actual: List[Dict[str, Any]]
     expected: List[Dict[str, Any]]
     rendered: str
+    failures: int
 
 
 @dataclass
@@ -236,11 +237,14 @@ class TestRunner(CompileRunner):
             should_error = True
             rendered = self._render_daff_diff(daff_diff)
             rendered = f"\n\n{green('actual')} differs from {red('expected')}:\n\n{rendered}\n"
+            summary = daff_diff.getSummary()
+            failures = summary.row_deletes + summary.row_inserts + summary.row_updates
 
             diff = UnitTestDiff(
                 actual=json_rows_from_table(actual),
                 expected=json_rows_from_table(expected),
                 rendered=rendered,
+                failures=failures,
             )
 
         return UnitTestResultData(
@@ -303,7 +307,7 @@ class TestRunner(CompileRunner):
         if result.should_error:
             status = TestStatus.Fail
             message = result.diff.rendered if result.diff else None
-            failures = 1
+            failures = result.diff.failures if result.diff else 0
 
         return RunResult(
             node=test,  # type: ignore

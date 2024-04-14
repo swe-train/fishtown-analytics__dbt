@@ -53,6 +53,15 @@ class TestUnitTests:
         # Select by model name
         results = run_dbt(["test", "--select", "my_model"], expect_pass=False)
         assert len(results) == 5
+        # the failing unit test should have 2 failures (= 1 row removed + 1 row added)
+        assert (
+            next(
+                r.failures
+                for r in results
+                if r.node.unique_id == "unit_test.test.my_model.test_my_model"
+            )
+            == 2
+        )
 
         results = run_dbt(
             ["build", "--select", "my_model", "--resource-types", "model unit_test"],
