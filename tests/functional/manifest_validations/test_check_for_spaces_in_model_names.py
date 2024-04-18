@@ -59,6 +59,7 @@ class TestSpaceInModelNamesWithDebug:
         total_catcher = EventCatcher(TotalModelNamesWithSpacesDeprecation)
         runner = dbtRunner(callbacks=[spaces_check_catcher.catch, total_catcher.catch])
         runner.invoke(["parse"])
+        print(f"--- spaces_check_catcher.caught_events: {spaces_check_catcher.caught_events}")
         assert len(spaces_check_catcher.caught_events) == 1
         assert len(total_catcher.caught_events) == 1
         assert (
