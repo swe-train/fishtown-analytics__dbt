@@ -91,6 +91,8 @@ class CloneRunner(BaseRunner):
 
 
 class CloneTask(GraphRunnableTask):
+    PRESERVE_EDGES = False
+
     def raise_on_first_error(self):
         return False
 

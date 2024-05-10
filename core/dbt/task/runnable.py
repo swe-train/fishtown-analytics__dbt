@@ -70,6 +70,7 @@ RUNNING_STATE = DbtProcessState("running")
 
 class GraphRunnableTask(ConfiguredTask):
     MARK_DEPENDENT_ERRORS_STATUSES = [NodeStatus.Error]
+    PRESERVE_EDGES = True
 
     def __init__(self, args: Flags, config: RuntimeConfig, manifest: Manifest) -> None:
         super().__init__(args, config, manifest)
@@ -145,7 +146,7 @@ class GraphRunnableTask(ConfiguredTask):
         selector = self.get_node_selector()
         # Following uses self.selection_arg and self.exclusion_arg
         spec = self.get_selection_spec()
-        return selector.get_graph_queue(spec)
+        return selector.get_graph_queue(spec, self.PRESERVE_EDGES)
 
     def _runtime_initialize(self):
         self.compile_manifest()
