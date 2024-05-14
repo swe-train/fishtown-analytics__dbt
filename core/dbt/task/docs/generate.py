@@ -70,10 +70,11 @@ def build_catalog_table(data) -> CatalogTable:
 
 # keys are database name, schema name, table name
 class Catalog(Dict[CatalogKey, CatalogTable]):
-    def __init__(self, columns: List[PrimitiveDict]) -> None:
+    def __init__(self, catalog_data: Any) -> None:
         super().__init__()
-        for col in columns:
-            self.add_column(col)
+        for row in catalog_data:
+            row_copy = dict(zip(row.keys(), map(dbt.utils._coerce_decimal, row.values())))
+            self.add_column(row_copy)
 
     def get_table(self, data: PrimitiveDict) -> CatalogTable:
         database = data.get("table_database")
@@ -287,12 +288,7 @@ class GenerateTask(CompileTask):
                     catalogable_nodes, used_schemas, relations
                 )
 
-        catalog_data: List[PrimitiveDict] = [
-            dict(zip(catalog_table.column_names, map(dbt.utils._coerce_decimal, row)))
-            for row in catalog_table
-        ]
-
-        catalog = Catalog(catalog_data)
+        catalog = Catalog(catalog_table)
 
         errors: Optional[List[str]] = None
         if exceptions:
