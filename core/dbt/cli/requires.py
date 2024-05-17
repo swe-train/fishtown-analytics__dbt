@@ -107,6 +107,8 @@ def setup_record_replay():
         recorder = Recorder(RecorderMode.REPLAY, recording_path)
     elif rec_mode == RecorderMode.RECORD:
         recorder = Recorder(RecorderMode.RECORD)
+    elif rec_mode == RecorderMode.RECORD_QUERIES:
+        recorder = Recorder(RecorderMode.RECORD_QUERIES)
 
     get_invocation_context().recorder = recorder
 
@@ -114,7 +116,7 @@ def setup_record_replay():
 def tear_down_record_replay():
     recorder = get_invocation_context().recorder
     if recorder is not None:
-        if recorder.mode == RecorderMode.RECORD:
+        if recorder.mode == RecorderMode.RECORD or recorder.mode == RecorderMode.RECORD_QUERIES:
             recorder.write("recording.json")
         elif recorder.mode == RecorderMode.REPLAY:
             recorder.write_diffs("replay_diffs.json")
