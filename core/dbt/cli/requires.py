@@ -32,6 +32,7 @@ from dbt.parser.manifest import parse_manifest
 from dbt.plugins import set_up_plugin_manager
 from dbt.profiler import profiler
 from dbt.tracking import active_user, initialize_from_flags, track_run
+from dbt.utils import try_get_max_rss_kb
 from dbt.version import installed as installed_version
 from dbt_common.clients.system import get_env
 from dbt_common.context import get_invocation_context, set_invocation_context
@@ -148,6 +149,9 @@ def postflight(func):
                 import resource
 
                 rusage = resource.getrusage(resource.RUSAGE_SELF)
+                max_rss = try_get_max_rss_kb()
+                if max_rss is None:
+                    max_rss = rusage.ru_maxrss
                 fire_event(
                     ResourceReport(
                         command_name=ctx.command.name,
@@ -155,7 +159,7 @@ def postflight(func):
                         command_wall_clock_time=time.perf_counter() - start_func,
                         process_user_time=rusage.ru_utime,
                         process_kernel_time=rusage.ru_stime,
-                        process_mem_max_rss=rusage.ru_maxrss,
+                        process_mem_max_rss=max_rss,
                         process_in_blocks=rusage.ru_inblock,
                         process_out_blocks=rusage.ru_oublock,
                     ),
