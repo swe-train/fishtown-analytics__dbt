@@ -357,43 +357,6 @@ def mock_manifest(config, additional_macros=None):
     return m
 
 
-def mock_model():
-    return mock.MagicMock(
-        __class__=ModelNode,
-        alias="model_one",
-        name="model_one",
-        database="dbt",
-        schema="analytics",
-        resource_type=NodeType.Model,
-        unique_id="model.root.model_one",
-        fqn=["root", "model_one"],
-        package_name="root",
-        original_file_path="model_one.sql",
-        refs=[],
-        sources=[],
-        depends_on=DependsOn(),
-        config=NodeConfig.from_dict(
-            {
-                "enabled": True,
-                "materialized": "view",
-                "persist_docs": {},
-                "post-hook": [],
-                "pre-hook": [],
-                "vars": {},
-                "quoting": {},
-                "column_types": {},
-                "tags": [],
-            }
-        ),
-        tags=[],
-        path="model_one.sql",
-        language="sql",
-        raw_code="",
-        description="",
-        columns={},
-    )
-
-
 def mock_unit_test_node():
     return mock.MagicMock(
         __class__=UnitTestNode,
@@ -472,9 +435,15 @@ def test_invocation_args_to_dict_in_macro_runtime_context(
     assert ctx["invocation_args_dict"]["warn_error_options"] == {"include": [], "exclude": []}
 
 
-def test_model_parse_context(config_postgres, manifest_fx, get_adapter, get_include_paths):
+def test_model_parse_context(
+    config_postgres,
+    manifest_fx,
+    get_adapter,
+    get_include_paths,
+    mock_model: mock.MagicMock,
+):
     ctx = providers.generate_parser_model_context(
-        model=mock_model(),
+        model=mock_model,
         config=config_postgres,
         manifest=manifest_fx,
         context_config=mock.MagicMock(),
@@ -482,17 +451,23 @@ def test_model_parse_context(config_postgres, manifest_fx, get_adapter, get_incl
     assert_has_keys(REQUIRED_MODEL_KEYS, MAYBE_KEYS, ctx)
 
 
-def test_model_runtime_context(config_postgres, manifest_fx, get_adapter, get_include_paths):
+def test_model_runtime_context(
+    config_postgres,
+    manifest_fx,
+    get_adapter,
+    get_include_paths,
+    mock_model: mock.MagicMock,
+):
     ctx = providers.generate_runtime_model_context(
-        model=mock_model(),
+        model=mock_model,
         config=config_postgres,
         manifest=manifest_fx,
     )
     assert_has_keys(REQUIRED_MODEL_KEYS, MAYBE_KEYS, ctx)
 
 
-def test_docs_runtime_context(config_postgres):
-    ctx = docs.generate_runtime_docs_context(config_postgres, mock_model(), [], "root")
+def test_docs_runtime_context(config_postgres, mock_model: mock.MagicMock):
+    ctx = docs.generate_runtime_docs_context(config_postgres, mock_model, [], "root")
     assert_has_keys(REQUIRED_DOCS_KEYS, MAYBE_KEYS, ctx)
 
 
