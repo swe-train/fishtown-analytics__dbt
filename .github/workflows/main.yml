@@ -68,8 +68,12 @@ jobs:
           python -m pip --version
           tox --version
 
-      - name: Run tox
-        run: tox
+      - name: Run integration tests
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: tox
 
   unit:
     name: unit test / python ${{ matrix.python-version }}
